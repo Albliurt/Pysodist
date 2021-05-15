@@ -1,0 +1,37 @@
+#######################
+#PYSODIST OPTIONS FILE#
+#######################
+This file is read on running pysodist.py and can be used to experiment with different settings
+Be careful with formatting, every setting line should begin '-> [setting_name] = [setting_value] ' where the spaces matter
+Keep in mind that some of the settings are interconnected. For example, if you change to interpolated mass spec data by setting use_raw_data=False,
+you might find ftol needs to adjusted as well.
+One
+
+General Settings:
+-> plot_progress = True #(defualt False) Will display matplotlib plots as fitting proceeds so you can see how it's doing
+-> print_progress = True #(default True) Will print parameter values and residual every few iterations to see progress
+-> update_frequency = 50 #(default 50) Will print/plot update every [update_frequency] iterations (and plot at beginning and end) if plot_progress=True
+-> auto_save = True #(default True) If True, will save each fit to the same place as the peak data, but with the file name having '_FIT' at the end
+			#Will be overriden if a save location is explicitly provided as a sysarg
+-> double_check_final_fit = True #(default False) If True, will make an overlaid plot of the results_tsv and raw mass spec data to double check fit. 
+
+Preprocessing Settings:
+-> auto_N = True #(default True) N is the length of the m/z array which will be used for the model. auto_N makes this as small as possible while covering all the data.
+-> N = 65536 #(default 16384) irrelevent if auto_N is set as True above (recommended)
+-> dm = .001 #(default .01) mass increment in model m/z array (smaller=finer gradations=bigger N array (if auto_N)=more accurate=slower)
+-> use_raw_data = True #(default True) This should be True if you just want to match the model at the raw machine values.
+			#If set to False, the program will (cubic) interpolate the raw_data (keeping the values positive, you can set plot_progress=True to see what it's 			# doing), and match the model to the interpolated data. 
+-> exp_box_size = .05 #(default .05) irrelevent if use_raw_data=True . if use_raw_data=False (i.e. interpolating), this will be the m/z bin size for the data
+
+Fourier Transform Settings:
+-> rfft = True #(default True) may be changed to False, in which case the program will use the normal (complex) fft instead. rfft gives ~2x space savings
+
+Fitting Settings:
+-> match_high_points = True #(default True) Makes sure the maximum intensity of the experimental data and model match (works quite well in practice)
+				#note though that if the mass spec data is contaminated with peaks larger than those to be fitted, this should be turned off
+-> carry_over_params = True #(default True) If True, will keep final parameters as initial of next peak for a given batch--hopefully save fitting time.
+-> peak_weight = .85 #(default .85) In computing the ls errror at each point, the standard value will be multiplied by emperical_value**peak_weight
+			#(so a value of 0 is regular least squares, and larger numbers give more weight to fitting peaks than low points)
+-> ftol = 5e-10 #5e-10 #(default 5e-10) Gradient descent will stop when change in error less than this amount, smaller=more sensitive=more iterations
+-> max_iters = 50 #(default 200) Maximum number of descent iterations, though there may be a constant multiplier to this, see max_nfev on scipy.optimize.least_squares
+-> loss = soft_l1 #(default soft_l1). Other options are 'linear', 'huber', 'soft_l1', 'cauchy', 'arctan', see scipy.optimize.least_squares documentation
