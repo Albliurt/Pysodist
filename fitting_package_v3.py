@@ -117,7 +117,7 @@ class FittingProblem():
                     m_idx = mass/self.dm
                     temp_fourier_array = (-2*pi*j*m_idx/self.N)*np.arange(0,array_size)
                     fourier_array += freq*np.exp(temp_fourier_array)
-            self.ft_atom_models[atom] = fourier_array
+                ssself.ft_atom_models[atom] = fourier_array
 
     def ResidueSpectrum(self):
         ft_atom_models = self.ft_atom_models
@@ -259,11 +259,6 @@ class FittingProblem():
             for res in self.var_res:
                 params.append(self.params['var_res'][res])
         return params
-        '''if self.current_param == 'final':
-            return None
-        if self.current_param == 'var_atoms':
-            return self.params[self.current_param][self.current_atom]
-        return self.params[self.current_param]'''
 
     def testParams(self, params):
         self.schedule['var_res'] = 1
@@ -289,20 +284,23 @@ class FittingProblem():
     def fitschedule(self):
         start = time.time()
         print("Round 1")
+        # Fitting amplitudes preliminarily
         self.schedule['amps'] = 1
         self.scipy_optimize_ls()
 
         print("Round 2")
+        # Fitting m_off
         self.schedule['amps'] = 0
         self.schedule['m_off'] = 1
         self.scipy_optimize_ls()
 
         print("Round 3")
-        '''Code for variable residues'''
+        # Fitting gaussian width with m_off
         self.schedule['gw'] = 1
         self.scipy_optimize_ls()
 
         print("Round 4")
+        # Fitting variable atoms
         if len(self.params['var_atoms']) > 0:
             self.schedule['var_atoms'] = 1
             self.scipy_optimize_ls()
@@ -310,6 +308,7 @@ class FittingProblem():
         self.schedule['var_atoms'] = 0
 
         print("Round 5")
+        # Fitting variable residues (SILAC)
         if len(self.params['var_res']) > 0:
             self.schedule['gw'] = 0
             self.schedule['m_off'] = 0
@@ -319,13 +318,7 @@ class FittingProblem():
             self.scipy_optimize_ls()
 
         print("Round 6")
-        self.schedule['amps'] = 1
-        self.schedule['gw'] = 0
-        self.schedule['m_off'] = 0
-        self.schedule['var_res'] = 0
-        self.schedule['var_atoms'] = 0
-
-        print("Round 7")
+        # Fitting everything together
         self.schedule['amps'] = 1
         self.schedule['gw'] = 1
         self.schedule['m_off'] = 1
