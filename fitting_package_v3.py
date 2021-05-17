@@ -117,7 +117,7 @@ class FittingProblem():
                     m_idx = mass/self.dm
                     temp_fourier_array = (-2*pi*j*m_idx/self.N)*np.arange(0,array_size)
                     fourier_array += freq*np.exp(temp_fourier_array)
-                ssself.ft_atom_models[atom] = fourier_array
+                self.ft_atom_models[atom] = fourier_array
 
     def ResidueSpectrum(self):
         ft_atom_models = self.ft_atom_models
