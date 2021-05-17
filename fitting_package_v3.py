@@ -21,27 +21,6 @@ CARRY_OVER_PARAMS=True if options['auto_save']=='True' else False
 j=1j #imaginary unit
 
 
-def Ft_Shift(N, dm, shift):
-    array_size=N//2+1 if RFFT else N
-    m_idx=shift/dm
-    #fourier_array = np.array(list(map(lambda k:e**(-2*pi*j*m_idx*k/N), range(array_size))), dtype=complex)
-    temp_array = np.arange(0,array_size)
-    fourier_array = np.exp((-2*pi*j*m_idx/N)*temp_array)
-    return fourier_array
-
-def Convolution(ft_spectra,mults,names=None):
-    if names == None:
-        names = list(range(len(mults)))
-    conv = np.ones(len(ft_spectra[names[0]]), dtype=complex)
-    for i in range(len(mults)):
-        conv = np.multiply(conv, np.power(ft_spectra[names[i]],mults[i]))
-    return conv
-
-def LinCombFt(spectra,amps):
-    comb = np.zeros(len(irfft(spectra[0])))
-    for i in range(len(spectra)):
-        comb += amps[i]*irfft(spectra[i])
-    return comb
 
 class FittingProblem():
     def __init__(self, N, dm, AtomInfo, ResidueInfo, PeptideInfo, params, m_hd, target):
@@ -104,43 +83,41 @@ class FittingProblem():
         self.masses = None
         self.residual = 0
 
+    def Ft_Shift(self, shift):
+        array_size=self.N//2+1 if RFFT else self.N
+        m_idx=shift/self.dm
+        temp_array = np.arange(0,array_size)
+        fourier_array = np.exp((-2*pi*j*m_idx/self.N)*temp_array)
+        return fourier_array
+
+    def Convolution(self, ft_spectra,mults,names=None):
+        if names == None:
+            names = list(range(len(mults)))
+        conv = np.ones(len(ft_spectra[names[0]]), dtype=complex)
+        for i in range(len(mults)):
+            conv = np.multiply(conv, np.power(ft_spectra[names[i]],mults[i]))
+        return conv
+
+    def LinCombFt(self, spectra,amps):
+        comb = np.zeros(len(irfft(spectra[0])))
+        for i in range(len(spectra)):
+            comb += amps[i]*irfft(spectra[i])
+        return comb
+
     def AtomSpectrum(self):
-        time1 = time.time()
         atom_masses = self.AtomInfo.atom_masses
         atom_freqs = self.AtomInfo.atom_freqs
         ft_atom_models = dict()
         array_size=self.N//2+1 if RFFT else self.N
-        print(self.N)
         for atom in atom_masses:
             if self.ft_atom_models[atom] is None or atom in self.var_atoms:
                 fourier_array=np.zeros(array_size,dtype=complex)
-                #nf_array = np.zeros(self.N, dtype=complex)
-
                 for i in range(len(atom_masses[atom])):
                     mass,freq=atom_masses[atom][i],atom_freqs[atom][i]
-                    #m_idx=round(mass/self.dm)%self.N
-                    #nf_array[m_idx] = freq
                     m_idx = mass/self.dm
                     temp_fourier_array = (-2*pi*j*m_idx/self.N)*np.arange(0,array_size)
                     fourier_array += freq*np.exp(temp_fourier_array)
-
-
-
-
-                    #nf_array[m_idx] = freq
-                    #print("Hello")
-                    #fourier_array += np.array(list(map(lambda k: freq*e**(-2*pi*j*m_idx*k/self.N), range(array_size))), dtype = complex)
-                    #
-
-
-                    #for k in range(array_size):
-                    #    fourier_array[k]+=freq*e**(-2*pi*j*m_idx*k/self.N)
-                #fourier_array = rfft(nf_array)
-                self.ft_atom_models[atom] = fourier_array
-        #print("---------")
-        #global asdfasdfasdf
-        #asdfasdfasdf += time.time() - time1
-        #self.ft_atom_models = ft_atom_models
+            self.ft_atom_models[atom] = fourier_array
 
     def ResidueSpectrum(self):
         ft_atom_models = self.ft_atom_models
@@ -153,25 +130,10 @@ class FittingProblem():
             ft_residue_models.append(dict())
             for residue in res_info:
                 if self.ft_residue_models[i][residue] is None or residue in self.var_res or self.schedule['var_atoms'] == 1:
-                    #print(residue)
-                    start = time.time()
                     mults = res_info[residue][i]
-                    ft_residue_models[i][residue] = Convolution(ft_atom_models,mults,res.atom_names)
+                    ft_residue_models[i][residue] = self.Convolution(ft_atom_models,mults,res.atom_names)
                     ft_residue_models[i][residue] = res_freqs[residue][i]*ft_residue_models[i][residue] + (1-res_freqs[residue][i])*ft_residue_models[0][residue]
                     self.ft_residue_models[i][residue] = ft_residue_models[i][residue]
-                    print("One residue: " + str(time.time()-start))
-
-        # for i in range(res.num_species):
-        #     res_spec = dict()
-        #     for j in res_info:
-        #
-        #         mults = res_info[j][i]
-        #         res_spec[j] = Convolution(ft_atom_models, mults, res.atom_names)
-        #     ft_residue_models.append(res_spec)
-        # for j in res_info:
-        #     for i in range(res.num_species):
-        #         ft_residue_models[i][j] = res_freqs[j][i]*ft_residue_models[i][j] + (1-res_freqs[j][i])*ft_residue_models[0][j]
-        # self.ft_residue_models = ft_residue_models
 
     def Ft_StickSpectrum(self):
         res = self.ResidueInfo
@@ -180,75 +142,46 @@ class FittingProblem():
         ft_species_models = []
         for j in range(res.num_species):
             mults, syms = self.PeptideInfo
-            ft_species_model = Convolution(ft_residue_models[j], mults, syms)
+            ft_species_model = self.Convolution(ft_residue_models[j], mults, syms)
             ft_species_models.append(ft_species_model)
-        unindexed = LinCombFt(ft_species_models, res.species_amps)
+        unindexed = self.LinCombFt(ft_species_models, res.species_amps)
         self.ft_species_models = ft_species_models
         self.ft_stick = rfft(unindexed)
 
     def Ft_Gaussian(self):
         #makes a Gaussian mass array
-        start = time.time()
         N = self.N
         sd = self.params['gw']
         dm = self.dm
 
-        #intensity_array = np.zeros(N, dtype = float)
         temp_array = np.arange(0,N//2)
         temp_array2 = np.power(dm*temp_array/sd,2)
         half_intensity_array = (1/(sd*(2*pi)**0.5))*np.exp(-0.5*temp_array2)
         full_intensity_array = np.concatenate((half_intensity_array,half_intensity_array[::-1]))
-
-        # intensity_array = np.zeros(N,dtype = float)
-        # for i in range(N//2):
-        #     intensity_array[i] = (1/(sd*(2*pi)**0.5))*e**(-0.5*(i*dm/sd)**2)
-        # for i in range(N//2, N):
-        #     intensity_array[i] = intensity_array[N-i-1]
-        #
         scale_factor = sum(full_intensity_array)
         full_intensity_array*=1/scale_factor
-        print("Gauss before rfft: "+  str(time.time()-start))
         self.ft_gauss = rfft(full_intensity_array)
-        print("Gauss after rfft: " + str(time.time()-start))
 
     def MakeModel(self):
-        begin = time.time()
-        #initialmodeltime = time.time()
-        #atomtime = time.time()
         if self.schedule['var_atoms'] == 1 or self.ft_stick is None:
             self.AtomSpectrum()
-            #atomtime = time.time()
-            #print("Atom Time: " + str(atomtime-initialmodeltime))
-
 
         if self.schedule['var_atoms'] == 1 or self.ft_stick is None or self.schedule['var_res'] == 1:
             self.ResidueSpectrum()
-            #print("Residue Time")
-            #newtime = time.time()
-            #print(str(newtime - atomtime))
-
-            print("Res end: " + str(time.time()-begin))
             self.Ft_StickSpectrum()
-            #newtime3 = time.time()
-            #print("Species Time:" + str(newtime3-newtime))
-            print("Stick end: " + str(time.time()-begin))
         elif self.schedule['amps'] == 1:
             self.Ft_StickSpectrum()
-            print("Amp end: " + str(time.time()-begin))
+
         if self.schedule['gw'] == 1 or self.ft_gauss is None:
             self.Ft_Gaussian()
-            print("Gauss end: " + str(time.time()-begin))
 
         stick = self.ft_stick
         gauss = self.ft_gauss
 
-        shift = Ft_Shift(self.N, self.dm, -self.m_hd)
-        m_off_shift = Ft_Shift(self.N,self.dm, -self.params['m_off'])
+        shift = self.Ft_Shift(-self.m_hd)
+        m_off_shift = self.Ft_Shift(-self.params['m_off'])
 
-        print("Shift end: " + str(time.time()-begin))
-        model = Convolution([stick,gauss,shift, m_off_shift],[1,1,1,1])
-        #print("Total time: "+str(time.time()-begin))
-        print("Total time: "+ str(time.time()-begin))
+        model = self.Convolution([stick,gauss,shift, m_off_shift],[1,1,1,1])
         return irfft(model)
 
     def plot(self):
@@ -267,7 +200,7 @@ class FittingProblem():
             plt.scatter(self.target_masses,self.target_intensities,color='red',s=9)
         plt.plot(mass_axis,model_ys)
         plt.xlabel('mass')
-        plt.ylabel('scaled_intensity')
+        plt.ylabel('intensity')
         plt.show()
 
     def save_fit(self,save_file,vert_shift=None,charge=1):
@@ -321,7 +254,7 @@ class FittingProblem():
             params = params + list(self.params['amps'])
         if self.schedule['var_atoms']==1:
             for atom in self.var_atoms:
-                params.append(self.params['var_atoms'][atom])#list(self.params['var_atoms'])
+                params.append(self.params['var_atoms'][atom])
         if self.schedule['var_res']==1:
             for res in self.var_res:
                 params.append(self.params['var_res'][res])
@@ -403,7 +336,7 @@ class FittingProblem():
 
         self.scipy_optimize_ls()
 
-        print(str(time.time()-start))
+        print("Time to fit: " + str(time.time()-start))
         #Normalize the amplitudes
         amp_sum = sum(self.params['amps'])
         self.params['amps'] = [x/amp_sum  for x in self.params['amps']]

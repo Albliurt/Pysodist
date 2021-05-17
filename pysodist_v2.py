@@ -1,12 +1,10 @@
 from pathlib import Path
 import os
-#from numba import jit
 
+#Changing the path to provide the packages needed
 filepath = Path(__file__).parent
 workingpath = Path.cwd()
 os.chdir(filepath)
-#print(Path(__file__).parent)
-#print(Path.cwd())
 
 import sys
 import parsers_v2 as parsers
@@ -15,7 +13,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 #import options_parser
-#@jit(nopython=True)
 
 sep_line="++++++++++++++++++++++++++++++++"
 np.set_printoptions(threshold=sys.maxsize)
@@ -24,15 +21,18 @@ np.set_printoptions(threshold=sys.maxsize)
 os.chdir(workingpath)
 
 def main(input_file, N = 65536, AUTO_N = True, PLOT_PROGRESS=True, DM = 0.001, USE_RAW_DATA = True,
-	EXP_BOX_SIZE = 0.05, AUTO_SAVE=True, DOUBLE_CHECK_FINAL_FIT=True, CARRY_OVER_PARAMS=True):
-	########################
-	#Parsing of Input Files
-	########################
+	EXP_BOX_SIZE = 0.05, AUTO_SAVE=True, DOUBLE_CHECK_FINAL_FIT=True, CARRY_OVER_PARAMS=False):
+	###################################
+	#Overarching method to run pysodist
+	###################################
+
+	#Parsing of input files
 	MainInfo = parsers.MainInfoParser(input_file)
 	AtomInfo = parsers.AtomInfoParser(MainInfo.atomfile)
 	ResidueInfo = parsers.ResInfoParser(MainInfo.resfile, AtomInfo)
 	BatchInfo = parsers.BatchInfoParser(MainInfo.batchfile)
 
+	#Initializing a saved params variable if they are to be carried across fits
 	if CARRY_OVER_PARAMS:
 		saved_params=None
 
@@ -66,6 +66,7 @@ def main(input_file, N = 65536, AUTO_N = True, PLOT_PROGRESS=True, DM = 0.001, U
 		print(sep_line)
 		print('\nFitting Peak:',BatchInfo.pep_names[i])
 		print('Data at:',BatchInfo.data_files[i])
+
 		###########################
 		#Build experimental target
 		###########################
@@ -85,9 +86,12 @@ def main(input_file, N = 65536, AUTO_N = True, PLOT_PROGRESS=True, DM = 0.001, U
 		params['m_off'] = MainInfo.m_off_init
 		params['gw'] = MainInfo.gw_init
 		params['amps'] = ResidueInfo.species_amps
+
 		##################
 		#Gradient descent
 		##################
+
+		#Loading out parameters from previous fit if carrying over params
 		if CARRY_OVER_PARAMS:
 			if saved_params is not None:
 				params = saved_params.copy()
