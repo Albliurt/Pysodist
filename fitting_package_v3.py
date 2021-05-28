@@ -79,7 +79,7 @@ class FittingProblem():
                 self.model_scale=1
             self.mode='binned'
             #make target the Array type used:
-            self.target=np.array(self.target)
+            self.target_intensities=np.array(self.target)
         self.masses = None
         self.residual = 0
 
@@ -195,9 +195,9 @@ class FittingProblem():
             self.model_scale = self.target_max/model_max
             model_ys *= self.model_scale
         if self.mode=='binned':
-            plt.scatter(mass_axis,self.target,color='red',s=9)
+            plt.scatter(mass_axis,self.target,color='red',s=5)
         elif self.mode=='unbinned':
-            plt.scatter(self.target_masses,self.target_intensities,color='red',s=9)
+            plt.scatter(self.target_masses,self.target_intensities,color='red',s=5)
         plt.plot(mass_axis,model_ys)
         plt.xlabel('mass')
         plt.ylabel('intensity')
