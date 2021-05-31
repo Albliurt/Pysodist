@@ -4,7 +4,9 @@ import matplotlib.pyplot as plt
 from numpy.fft import fft,ifft,rfft,irfft
 from math import pi,e,ceil,floor
 import time
-
+import csv
+import os.path
+from os import path
 import options_parser
 options=options_parser.OptionsParser().options
 RFFT=True if options['rfft']=='True' else False
@@ -23,15 +25,16 @@ j=1j #imaginary unit
 
 
 class FittingProblem():
-    def __init__(self, N, dm, AtomInfo, ResidueInfo, PeptideInfo, params, m_hd, target):
+    def __init__(self, N, dm, AtomInfo, ResidueInfo, BatchInfo, i, params, m_hd, target):
         self.N = N
         self.dm = dm
         self.m_hd = m_hd
 
         self.AtomInfo = AtomInfo
         self.ResidueInfo = ResidueInfo
-        self.PeptideInfo = PeptideInfo
-
+        self.BatchInfo = BatchInfo
+        self.PeptideInfo = (self.BatchInfo.batch_mults[i], self.BatchInfo.batch_syms[i])
+        self.pep_num = i
         self.params = params
         print(self.params)
         try:
@@ -203,7 +206,21 @@ class FittingProblem():
         plt.ylabel('intensity')
         plt.show()
 
-    def save_fit(self,save_file,vert_shift=None,charge=1):
+    def calc_mw(self):
+        atom_masses = self.AtomInfo.atom_masses
+        res = self.ResidueInfo
+        res_mults, res_syms = self.PeptideInfo
+        mw = 0
+        for i in range(len(res_syms)):
+            atom_mult = res.residue_info[res_syms[i]][0]
+            for j in range(len(atom_mult)):
+                mw += atom_mult[j]*atom_masses[res.atom_names[j]][0]*res_mults[i]
+        return mw
+
+
+    def save_fit(self,params_file, model_tsv, vert_shift=0,charge=1):
+        print(params_file)
+        print(model_tsv)
         mass_axis=np.arange(0,self.N*self.dm,self.dm)
         mass_axis=mass_axis[:self.N]
         if self.m_hd is not None:
@@ -218,20 +235,39 @@ class FittingProblem():
         #if scaledown is not None:
         #    model_ys*=scaledown
 
-        f=open(save_file,'w')
+
+        f=open(model_tsv,'w')
         #print out parameters on first line
-        line1=''
-        for param in self.params:
-            line1+=param+':'+str(self.params[param])+', '
-        if vert_shift is not None:
-            model_ys+=vert_shift
-            line1+="Baseline:"+str(vert_shift)+', '
-        f.write(line1[:-2]+'\n')
+        #line1=''
+        #for param in self.params:
+        #    line1+=param+':'+str(self.params[param])+', '
+        #if vert_shift is not None:
+        #    model_ys+=vert_shift
+        #    line1+="Baseline:"+str(vert_shift)+', '
+        #f.write(line1[:-2]+'\n')
         #print out model fit
         for i in range(self.N):
             line=str(mass_axis[i]/charge)+', '+str(model_ys[i])+'\n'
             f.write(line)
         f.close()
+
+        peptide_sequence = self.BatchInfo.pep_names[self.pep_num]
+        pep_name = peptide_sequence[1:3]
+        charge = self.BatchInfo.charges[self.pep_num]
+        molecular_weight = self.calc_mw()
+        mz = molecular_weight/charge
+
+        with open(params_file, mode='a', newline=None) as f:
+            param_writer = csv.writer(f, lineterminator = '\n')
+            line = [model_tsv, pep_name, peptide_sequence, molecular_weight, charge, self.residual, mz,
+                vert_shift,self.params['m_off'],self.params['gw']]
+
+            line += self.params['amps']
+            line += self.params['var_atoms'].values()
+            line += self.params['var_res'].values()
+            param_writer.writerow(line)
+            print("Saved")
+
 
     def estimate_intensity(self,mass):
         masses = self.masses
@@ -282,6 +318,9 @@ class FittingProblem():
 
 
     def fitschedule(self):
+
+        self.calc_mw()
+        #wait(5000)
         start = time.time()
         print("Round 1")
         # Fitting amplitudes preliminarily
@@ -418,7 +457,8 @@ class FittingProblem():
             self.model_scale = self.target_max/model_max
             model_masses *= self.model_scale
         out = (model_masses-self.target_intensities)#*(self.target_intensities)**HIGH_WEIGHT
-        print('Square Error: '+str(sum(out**2)))
+        self.residual = sum(out**2)
+        print('Square Error: '+str(self.residual))
         return out
 
     def scipy_optimize_ls(self):
