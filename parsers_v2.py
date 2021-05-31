@@ -1,4 +1,3 @@
-import xmltodict
 #import fitting_package_v3 as pysofit
 import numpy as np
 from numpy.fft import fft,ifft,rfft,irfft
