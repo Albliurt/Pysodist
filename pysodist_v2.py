@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 import argparse
+import csv
 #import options_parser
 
 sep_line="++++++++++++++++++++++++++++++++"
@@ -38,6 +39,19 @@ def main(input_file, N = 65536, AUTO_N = True, PLOT_FIT=False, DM = 0.001, USE_R
 		saved_params=None
 
 
+	params_csv = input_file+".csv"
+	with open(params_csv, 'w', newline='') as f:
+		line = ["file","protein","peptide","mz","z_charge","chisq","mz","B","off","gw"]
+		for i in ResidueInfo.species_names:
+			line.append("AMP_" + str(i))
+		for i in range(len(ResidueInfo.atom_modes)):
+			if ResidueInfo.atom_modes[i] == "variable":
+				line.append("FRC_"+str(ResidueInfo.atom_names[i]))
+		for i in range(len(ResidueInfo.residue_modes)):
+			if ResidueInfo.residue_modes[i] == "variable":
+				line.append("FRC_"+str(ResidueInfo.residue_names[i]))
+		f_writer = csv.writer(f)
+		f_writer.writerow(line)
 
 	for i in range(BatchInfo.num_batches):
 		params = dict()
@@ -97,8 +111,9 @@ def main(input_file, N = 65536, AUTO_N = True, PLOT_FIT=False, DM = 0.001, USE_R
 			if saved_params is not None:
 				params = saved_params.copy()
 
-		PeptideInfo = (BatchInfo.batch_mults[i], BatchInfo.batch_syms[i])
-		fit = pysofit.FittingProblem(N,DM,AtomInfo,ResidueInfo, PeptideInfo, params, m_hd, target)
+		PeptideInfo = [(BatchInfo.batch_mults[i], BatchInfo.batch_syms[i]), BatchInfo.pep_names[i]]
+
+		fit = pysofit.FittingProblem(N,DM,AtomInfo,ResidueInfo, BatchInfo, i, params, m_hd, target)
 		fit.fitschedule()
 
 		print(BatchInfo.pep_names[i])
@@ -109,13 +124,15 @@ def main(input_file, N = 65536, AUTO_N = True, PLOT_FIT=False, DM = 0.001, USE_R
 		################
 		#Saving the Fit
 		################
-		if not AUTO_SAVE:
-			print('\nSaving fit data to:',results_tsv)
-			fit.save_fit(results_tsv,exp_data.vert_shift,BatchInfo.charges[i]) #extra data here is because have to undo normalizations before saving
-		else:
-			save_loc=BatchInfo.data_files[i][:-4]+'_FIT.tsv'
-			print('\nSaving fit data to:',save_loc)
-			fit.save_fit(save_loc,exp_data.vert_shift,BatchInfo.charges[i])
+		model_spectrum_tsv = BatchInfo.data_files[i][:-4]+'_FIT.tsv'
+		fit.save_fit(params_csv, model_spectrum_tsv, exp_data.vert_shift, BatchInfo.charges[i])
+		#if not AUTO_SAVE:
+		#	print('\nSaving fit data to:',results_tsv)
+		#	fit.save_fit(results_tsv,exp_data.vert_shift,BatchInfo.charges[i]) #extra data here is because have to undo normalizations before saving
+		#else:
+		#	save_loc=BatchInfo.data_files[i][:-4]+'_FIT.tsv'
+		#	print('\nSaving fit data to:',save_loc)
+		#	fit.save_fit(save_loc,exp_data.vert_shift,BatchInfo.charges[i])
 
 
 parser = argparse.ArgumentParser(description = '')
