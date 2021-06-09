@@ -5,9 +5,8 @@ from numpy.fft import fft,ifft,rfft,irfft
 from math import pi,e,ceil,floor
 import time
 import csv
-import os.path
-from os import path
 import options_parser
+
 options=options_parser.OptionsParser().options
 RFFT=True if options['rfft']=='True' else False
 HIGH_WEIGHT=float(options['peak_weight'])
@@ -25,7 +24,8 @@ j=1j #imaginary unit
 
 
 class FittingProblem():
-    def __init__(self, N, dm, AtomInfo, ResidueInfo, BatchInfo, i, params, m_hd, target):
+    #Overarching class that contains model generation and fitting
+    def __init__(self, N, dm, AtomInfo, ResidueInfo, BatchInfo, i, params, m_hd, target, logfile):
         self.N = N
         self.dm = dm
         self.m_hd = m_hd
@@ -36,7 +36,6 @@ class FittingProblem():
         self.PeptideInfo = (self.BatchInfo.batch_mults[i], self.BatchInfo.batch_syms[i])
         self.pep_num = i
         self.params = params
-        print(self.params)
         try:
             self.var_atom
         except:
@@ -86,7 +85,12 @@ class FittingProblem():
         self.masses = None
         self.residual = 0
 
+        self.logfile = logfile
+        with open(self.logfile, 'a', newline = None) as log:
+            log.write(self.BatchInfo.pep_names[self.pep_num] + "\n")
+
     def Ft_Shift(self, shift):
+        #Creates the fourier transform of a delta function, which functions as a shifter
         array_size=self.N//2+1 if RFFT else self.N
         m_idx=shift/self.dm
         temp_array = np.arange(0,array_size)
@@ -94,6 +98,7 @@ class FittingProblem():
         return fourier_array
 
     def Convolution(self, ft_spectra,mults,names=None):
+        #Convolves fourier spectra with given multiplicities
         if names == None:
             names = list(range(len(mults)))
         conv = np.ones(len(ft_spectra[names[0]]), dtype=complex)
@@ -102,12 +107,14 @@ class FittingProblem():
         return conv
 
     def LinCombFt(self, spectra,amps):
+        #Takes the linear combination of multiple fourier transformed spectra. Returns in the mass domain
         comb = np.zeros(len(irfft(spectra[0])))
         for i in range(len(spectra)):
             comb += amps[i]*irfft(spectra[i])
         return comb
 
     def AtomSpectrum(self):
+        #Creates the atom spectra based on the data from the atom model
         atom_masses = self.AtomInfo.atom_masses
         atom_freqs = self.AtomInfo.atom_freqs
         ft_atom_models = dict()
@@ -123,6 +130,8 @@ class FittingProblem():
                 self.ft_atom_models[atom] = fourier_array
 
     def ResidueSpectrum(self):
+        #Creates the residue spectra by convolving atom spectra together
+        #Adding together based on the residue fraction for each labeling scheme
         ft_atom_models = self.ft_atom_models
         res = self.ResidueInfo
         ft_residue_models = []
@@ -139,6 +148,7 @@ class FittingProblem():
                     self.ft_residue_models[i][residue] = ft_residue_models[i][residue]
 
     def Ft_StickSpectrum(self):
+        #Creates the total stick spectrum of the peptide. Convolves residues within each labeling scheme and then linearly combines them
         res = self.ResidueInfo
         ft_residue_models = self.ft_residue_models
         res_info = res.residue_info
@@ -152,7 +162,7 @@ class FittingProblem():
         self.ft_stick = rfft(unindexed)
 
     def Ft_Gaussian(self):
-        #makes a Gaussian mass array
+        #makes a Gaussian mass array with a given gw
         N = self.N
         sd = self.params['gw']
         dm = self.dm
@@ -166,6 +176,7 @@ class FittingProblem():
         self.ft_gauss = rfft(full_intensity_array)
 
     def MakeModel(self):
+        #Calculates the new spectrum/model based on the parameters. Determines what parts need to be recomputed based on the fitting schedule
         if self.schedule['var_atoms'] == 1 or self.ft_stick is None:
             self.AtomSpectrum()
 
@@ -188,6 +199,7 @@ class FittingProblem():
         return irfft(model)
 
     def plot(self):
+        #Plots the fit
         mass_axis=np.arange(0,self.N*self.dm,self.dm)
         mass_axis=mass_axis[:self.N] #sometimes a bit too long, rounding issues?
         if self.m_hd is not None:
@@ -207,6 +219,7 @@ class FittingProblem():
         plt.show()
 
     def calc_mw(self):
+        #Calculates the peptide's molecular weight
         atom_masses = self.AtomInfo.atom_masses
         res = self.ResidueInfo
         res_mults, res_syms = self.PeptideInfo
@@ -219,33 +232,20 @@ class FittingProblem():
 
 
     def save_fit(self,params_file, model_tsv, vert_shift=0,charge=1):
-        print(params_file)
-        print(model_tsv)
+        #Saves the calculated spectrum into a tsv
+        #Also outputs the final parameters into a csv
         mass_axis=np.arange(0,self.N*self.dm,self.dm)
         mass_axis=mass_axis[:self.N]
         if self.m_hd is not None:
             mass_axis+=self.m_hd
         model_ys=self.masses
-        #print(self.masses)
-        #print(vert_shift)
-        #if MATCH_HIGH_POINTS:
-        #    model_max = max(model_ys)
-        #    self.model_scale = self.target_max/model_max
-        #    model_ys *= self.model_scale
-        #if scaledown is not None:
-        #    model_ys*=scaledown
+        if MATCH_HIGH_POINTS:
+            model_max = max(model_ys)
+            self.model_scale = self.target_max/model_max
+            model_ys *= self.model_scale
 
-
+        #Saves the spectrum in a tsv
         f=open(model_tsv,'w')
-        #print out parameters on first line
-        #line1=''
-        #for param in self.params:
-        #    line1+=param+':'+str(self.params[param])+', '
-        #if vert_shift is not None:
-        #    model_ys+=vert_shift
-        #    line1+="Baseline:"+str(vert_shift)+', '
-        #f.write(line1[:-2]+'\n')
-        #print out model fit
         for i in range(self.N):
             line=str(mass_axis[i]/charge)+', '+str(model_ys[i])+'\n'
             f.write(line)
@@ -257,6 +257,7 @@ class FittingProblem():
         molecular_weight = self.calc_mw()
         mz = molecular_weight/charge
 
+        #Saves the parameters in a csv
         with open(params_file, mode='a', newline=None) as f:
             param_writer = csv.writer(f, lineterminator = '\n')
             line = [model_tsv, pep_name, peptide_sequence, molecular_weight, charge, self.residual, mz,
@@ -268,8 +269,58 @@ class FittingProblem():
             param_writer.writerow(line)
             print("Saved")
 
+    def loground(self, roundnumber, header = False):
+        with open(self.logfile, mode = 'a', newline = None) as log:
+            if header:
+                line = "ROUND " + str(roundnumber) + "\tCHI_SQUARE"
+                if self.schedule['m_off'] == 1:
+                    line += "\tFREE M_OFF"
+                else:
+                    line += "\tFIX M_OFF"
+
+                if self.schedule['gw'] == 1:
+                    line += "\tFREE GW"
+                else:
+                    line += "\tFIX GW"
+
+                if self.schedule['amps'] == 1:
+                    for species_name in self.ResidueInfo.species_names:
+                        line += "\tFREE AMP_"+species_name
+                else:
+                    for species_name in self.ResidueInfo.species_names:
+                        line += "\tFIX AMP_"+species_name
+
+                if self.schedule['var_atoms'] == 1:
+                    for var_atom in self.params['var_atoms']:
+                        line += "\tFREE FRC_"+var_atom
+                else:
+                    for var_atom in self.params['var_atoms']:
+                        line += "\tFIX FRC_"+var_atom
+
+                if self.schedule['var_res'] == 1:
+                    for var_res in self.params['var_res']:
+                        line += "\tFREE FRC_"+var_res
+                else:
+                    for var_res in self.params['var_res']:
+                        line += "\tFIX FRC_"+var_res
+                line += "\n"
+                log.write(line)
+
+            line = "\t"+str("{:.4e}".format(self.residual)) +"\t" +"{:.4f}".format(self.params['m_off']) + "\t" + "{:.4f}".format(self.params['gw'])
+
+            normalized_amps = self.params['amps']/sum(self.params['amps'])
+            for amp in normalized_amps:
+                line += "\t"+"{:.4f}".format(amp)
+            for var_atom_value in self.params['var_atoms'].values():
+                line += "\t"+"{:.4f}".format(var_atom_value)
+            for var_res_value in self.params['var_res'].values():
+                line += "\t" + "{:.4f}".format(var_res_value)
+            line += "\n"
+            log.write(line)
 
     def estimate_intensity(self,mass):
+        #Estimates the intensity of the experimental spectrum between two of the points, in order to compare the spectra
+        #Linear interpolation
         masses = self.masses
         lower = floor(mass/self.dm)
         upper = ceil(mass/self.dm)
@@ -281,6 +332,7 @@ class FittingProblem():
             return masses[lower] + (mass/self.dm-lower)*(masses[upper]-masses[lower])
 
     def get_params(self):
+        #Returns a parameter vector containing the relevant parameters that are being fitted
         params = []
         if self.schedule['m_off'] == 1:
             params.append(self.params['m_off'])
@@ -297,6 +349,7 @@ class FittingProblem():
         return params
 
     def testParams(self, params):
+        #Testing method that constructs a spectrum given input parameters, and does not fit
         self.schedule['var_res'] = 1
         self.params['m_off'] = params['m_off']
         self.params['gw'] = params['gw']
@@ -318,45 +371,59 @@ class FittingProblem():
 
 
     def fitschedule(self):
+        #Schedules the parameters to be fit in each round
 
-        self.calc_mw()
-        #wait(5000)
+
         start = time.time()
-        print("Round 1")
+        roundnumber = 1
+        print("Round " + str(roundnumber) + ": Amplitudes")
         # Fitting amplitudes preliminarily
         self.schedule['amps'] = 1
         self.scipy_optimize_ls()
+        self.loground(roundnumber, True)
+        roundnumber += 1
 
-        print("Round 2")
+        print("Round " + str(roundnumber) +": M_Off")
         # Fitting m_off
         self.schedule['amps'] = 0
         self.schedule['m_off'] = 1
         self.scipy_optimize_ls()
+        self.loground(roundnumber, True)
+        roundnumber += 1
 
-        print("Round 3")
+        print("Round " + str(roundnumber) + ": M_Off + Gaussian Width")
         # Fitting gaussian width with m_off
         self.schedule['gw'] = 1
         self.scipy_optimize_ls()
+        self.loground(roundnumber, True)
+        roundnumber += 1
 
-        print("Round 4")
         # Fitting variable atoms
         if len(self.params['var_atoms']) > 0:
+            print("Round " + str(roundnumber) + ": Variable Atoms")
+            #Other parameters are not fit during this. Fit appears to work without them, though it is not what isodist does
+            self.schedule['gw'] = 0
+            self.schedule['m_off'] = 0
+            self.schedule['amps'] = 0
             self.schedule['var_atoms'] = 1
             self.scipy_optimize_ls()
+            self.loground(roundnumber, True)
+            roundnumber += 1
 
         self.schedule['var_atoms'] = 0
 
-        print("Round 5")
         # Fitting variable residues (SILAC)
         if len(self.params['var_res']) > 0:
+            print("Round " + str(roundnumber) + ": Variable Residues")
             self.schedule['gw'] = 0
             self.schedule['m_off'] = 0
             self.schedule['amps'] = 0
             self.schedule['var_res'] = 1
-
             self.scipy_optimize_ls()
+            self.loground(roundnumber, True)
+            roundnumber += 1
 
-        print("Round 6")
+        print("Round " + str(roundnumber) + ": All Parameters")
         # Fitting everything together
         self.schedule['amps'] = 1
         self.schedule['gw'] = 1
@@ -365,15 +432,16 @@ class FittingProblem():
             self.schedule['var_atoms'] = 1
         if len(self.params['var_res']) > 0:
             self.schedule['var_res'] = 1
-
         self.scipy_optimize_ls()
-
+        self.loground(roundnumber, True)
         print("Time to fit: " + str(time.time()-start))
+
         #Normalize the amplitudes
         amp_sum = sum(self.params['amps'])
         self.params['amps'] = [x/amp_sum  for x in self.params['amps']]
 
     def set_params(self,vector):
+        #Sets the parameters given the parameter vector
         if self.schedule['m_off'] == 1:
             self.params['m_off'] = vector[0]
             vector = vector[1:]
@@ -407,6 +475,7 @@ class FittingProblem():
 
 
     def get_bounds(self):#for scipy.optimize.least_squares
+        #Compute the bounds vector for each parameter that is being fit
         bound_dict={'gw':[0,.1],'var_atoms':[0,1],'amps':[0,np.inf],'m_off':[-0.1,0.1],'var_res':[0,1]} #maps parameter dist type to bounds
         lowers=[]
         uppers=[]
@@ -434,14 +503,7 @@ class FittingProblem():
 
 
     def compute_residual(self, param_vector=None):
-        PLOT_PROGRESS = True
-        # if self.iter_count%UPDATE_FREQUENCY==0:
-        #     #if PLOT_PROGRESS:
-        #     #    self.plot()
-        #     if PRINT_PROGRESS:
-        #         print('\nIteration: '+str(self.iter_count))
-        #         #self.print_params()
-        # self.iter_count+=1
+        #Computes the chi square residual, as well as the residual vector
         if not self.current_param == 'final':
             self.set_params(param_vector)
         self.masses = self.MakeModel()
@@ -456,15 +518,15 @@ class FittingProblem():
             model_max = max(model_masses)
             self.model_scale = self.target_max/model_max
             model_masses *= self.model_scale
-        out = (model_masses-self.target_intensities)#*(self.target_intensities)**HIGH_WEIGHT
+        out = (model_masses-self.target_intensities)
         self.residual = sum(out**2)
         print('Square Error: '+str(self.residual))
         return out
 
     def scipy_optimize_ls(self):
+        #Runs the least square optimization algorithm with trust region bounds
         params = self.get_params()
         bounds = self.get_bounds()
         print(self.params)
-        print(2.5e4)
         scaled_tolerance = FTOL*(1e6/max(self.target_intensities))*(2.5e4/self.N)
-        scipy.optimize.least_squares(self.compute_residual,params,bounds=bounds,ftol=scaled_tolerance,max_nfev=MAX_ITERS)#, method='lm')#,loss=LOSS,bounds=bounds)
+        scipy.optimize.least_squares(self.compute_residual,params,bounds=bounds,ftol=scaled_tolerance,max_nfev=MAX_ITERS)

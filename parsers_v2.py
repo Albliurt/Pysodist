@@ -1,11 +1,8 @@
-#import fitting_package_v3 as pysofit
 import numpy as np
 from numpy.fft import fft,ifft,rfft,irfft
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from math import pi,e
-
-from pathlib import Path
 
 class MainInfoParser(): #parses the .in file to hold relevant variables
     def __init__(self,infile):
@@ -28,7 +25,7 @@ class MainInfoParser(): #parses the .in file to hold relevant variables
 
         f.close()
 
-class AtomInfoParser():
+class AtomInfoParser(): #parses the atom model file to hold relevant data - masses and frequencies
     def __init__(self, file='atom_defs.txt'):
         self.file = file
         self.atom_masses = dict()
@@ -50,26 +47,25 @@ class AtomInfoParser():
                 self.atom_masses[current_atom].append(float(split_line[0]))
                 self.atom_freqs[current_atom].append(float(split_line[1]))
 
-class ResInfoParser():
+class ResInfoParser(): #parses the residue model file. Gives the variable residues, the atomic composition of each residue, as well as amplitudes and variable atoms
     def __init__(self, res_file, atom_parser):
 
         f = open(res_file,'r')
-        print(res_file)
         f.readline()#skip initial line
-            ##################
-            #collect all info
-            ##################
+        ##################
+        #collect all info
+        ##################
+
+        #Parse the species data - number of species and initial amplitudes
         num_species = int(f.readline().split()[0])
         species_names=[]
         species_amps=[]
         for i in range(num_species):
             line=f.readline().split()
             species_names.append(line[0])
-            print(species_names)
             species_amps.append(float(line[1]))
-            print(species_amps)
-        print(len(species_amps))
 
+        #Parse the variable atoms and their initial values
         n_var_atoms = 0 #number of variable atoms
         num_atoms = int(f.readline().split()[0]) #number of atom types: "elements"
         atom_names = []
@@ -78,7 +74,6 @@ class ResInfoParser():
 
         for i in range(num_atoms):
             line=f.readline().split()
-            print(line)
             atom_names.append(line[0])
             atom_modes.append(line[1])
             try:
@@ -131,7 +126,7 @@ class ResInfoParser():
         self.num_species = num_species
         self.res_freqs = res_freqs
 
-class BatchInfoParser():
+class BatchInfoParser(): #Parses the batch file in the input file. Gives the sequence, charges, and spectrum file
     def __init__(self, batch_file):
         f=open(batch_file,'r')
         #f.readline() #skip header line
@@ -171,7 +166,7 @@ class BatchInfoParser():
         self.batch_mults = batch_mults
 
 
-class ExpSpectrumParser():
+class ExpSpectrumParser(): #parses the experimental spectrum data file
     def __init__(self,data_file,charge):
         lines=open(data_file,'r').read().split('\n')[:-1] #cut off empty line at end
         self.masses=[]
@@ -185,24 +180,15 @@ class ExpSpectrumParser():
     def get_unbinned_target_array(self):#returns a tuple of target masses, values
         #subtract off baseline offset
         min_intensity=min(self.raw_intensities)
-        #min_intensity = 0.5*(sorted(self.raw_intensities)[len(self.raw_intensities)//4] + sorted(self.raw_intensities)[len(self.raw_intensities)//2])
         baselined_intensities=list(map(lambda x:x-min_intensity,self.raw_intensities))
         self.vert_shift=min_intensity
-        #normalize
-        #intensity_sum=sum(baselined_intensities)
-        #self.scaledown=intensity_sum
-        #normalized_intensities=list(map(lambda x:x/intensity_sum,baselined_intensities))
-        return self.masses,baselined_intensities#normalized_intensities
+        return self.masses,baselined_intensities
+
     def get_target_array_v1(self,N,dm,exp_box_size,m_hd):
         #subtract off baseline offset
         min_intensity=min(self.raw_intensities)
-        #min_intensity = 0.5*(sorted(self.raw_intensities)[len(self.raw_intensities)//4] + sorted(self.raw_intensities)[len(self.raw_intensities)//2])
         baselined_intensities=list(map(lambda x:x-min_intensity,self.raw_intensities))
         self.vert_shift=min_intensity
-        #normalize
-        #intensity_sum=sum(baselined_intensities)
-        #self.scaledown=intensity_sum
-        #normalized_intensities=list(map(lambda x:x/intensity_sum,baselined_intensities))
         #bin into N,dm array
         target_array=np.zeros(N,'float')
         for i,mass in enumerate(self.masses):
