@@ -9,7 +9,7 @@ class MainInfoParser(): #parses the .in file to hold relevant variables
         self.file=infile
         f=open(infile,'r')
         self.opt = f.readline().split()[0]
-        print(self.opt)
+
         self.batchfile = f.readline().split()[0]
         self.atomfile = f.readline().split()[0]
         self.resfile = f.readline().split()[0]
@@ -62,6 +62,7 @@ class ResInfoParser(): #parses the residue model file. Gives the variable residu
         species_amps=[]
         for i in range(num_species):
             line=f.readline().split()
+
             species_names.append(line[0])
             species_amps.append(float(line[1]))
 
@@ -92,7 +93,7 @@ class ResInfoParser(): #parses the residue model file. Gives the variable residu
         res_freqs = dict()
         while reading:
             line = f.readline()
-            print(line)
+            #print(line)
             if line=='':
                 reading=False
                 break
@@ -109,7 +110,7 @@ class ResInfoParser(): #parses the residue model file. Gives the variable residu
             res_freqs[current_res] = []
             for i in range(num_species):
                 a = f.readline()
-                print(a)
+                #print(a)
                 line=list(map(int,a.split()[:num_atoms]))
                 residue_info[current_res].append(line)
                 res_freqs[current_res].append(1)
@@ -171,12 +172,15 @@ class ExpSpectrumParser(): #parses the experimental spectrum data file
         lines=open(data_file,'r').read().split('\n')[:-1] #cut off empty line at end
         self.masses=[]
         self.raw_intensities=[]
-        for line in lines:
-            splitline=line.split(' ')
-            self.masses.append(float(splitline[0])*charge)
-            self.raw_intensities.append(float(splitline[1]))
-        self.m_hd=self.masses[0]
-        self.largest_mass=self.masses[-1]
+        try:
+            for line in lines:
+                splitline=line.split(' ')
+                self.masses.append(float(splitline[0])*charge)
+                self.raw_intensities.append(float(splitline[1]))
+            self.m_hd=self.masses[0]
+            self.largest_mass=self.masses[-1]
+        except:
+            self.m_hd=None
     def get_unbinned_target_array(self):#returns a tuple of target masses, values
         #subtract off baseline offset
         min_intensity=min(self.raw_intensities)

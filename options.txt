@@ -8,7 +8,7 @@ you might find ftol needs to adjusted as well.
 One
 
 General Settings:
--> plot_progress = True #(defualt False) Will display matplotlib plots as fitting proceeds so you can see how it's doing
+-> plot_progress = False #(defualt False) Will display matplotlib plots as fitting proceeds so you can see how it's doing
 -> print_progress = True #(default True) Will print parameter values and residual every few iterations to see progress
 -> update_frequency = 50 #(default 50) Will print/plot update every [update_frequency] iterations (and plot at beginning and end) if plot_progress=True
 -> auto_save = True #(default True) If True, will save each fit to the same place as the peak data, but with the file name having '_FIT' at the end

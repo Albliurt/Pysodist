@@ -14,13 +14,25 @@ import numpy as np
 import time
 import argparse
 import csv
+import options_parser
+
+options=options_parser.OptionsParser().options
+N = int(options['N'])
+DM = float(options['dm'])
+AUTO_N = True if options['auto_N'] == 'True' else False
+EXP_BOX_SIZE = float(options['exp_box_size'])
+USE_RAW_DATA = True if options['use_raw_data'] == 'True' else False
+CARRY_OVER_PARAMS = True if options['carry_over_params'] == 'True' else False
+PLOT_PROGRESS = True if options['plot_progress'] == 'True' else False
 
 sep_line="++++++++++++++++++++++++++++++++"
 
 os.chdir(workingpath)
 
-def main(input_file, N = 65536, AUTO_N = True, PLOT_FIT=False, DM = 0.001, USE_RAW_DATA = True,
-	EXP_BOX_SIZE = 0.05, AUTO_SAVE=True, CARRY_OVER_PARAMS=False):
+#def main(input_file, N = 65536, AUTO_N = True, PLOT_FIT=False, DM = 0.001, USE_RAW_DATA = True,
+#	EXP_BOX_SIZE = 0.05, AUTO_SAVE=True, CARRY_OVER_PARAMS=False):
+
+def main(input_file):
 	###################################
 	#Overarching method to run pysodist
 	###################################
@@ -41,9 +53,9 @@ def main(input_file, N = 65536, AUTO_N = True, PLOT_FIT=False, DM = 0.001, USE_R
 
 	#Creates the csv file that the saved parameters will be output into
 	#Prints out the first row, which are the just the parameter names
-	params_csv = input_file+".csv"
+	params_csv = MainInfo.batchfile+".csv"
 	with open(params_csv, 'w', newline='') as f:
-		line = ["file","protein","peptide","mz","z_charge","chisq","mz","B","off","gw"]
+		line = ["file","protein","peptide","mw","z_charge","chisq","mz","B","off","gw"]
 		for i in ResidueInfo.species_names:
 			line.append("AMP_" + str(i))
 		for i in range(len(ResidueInfo.atom_modes)):
@@ -105,6 +117,10 @@ def main(input_file, N = 65536, AUTO_N = True, PLOT_FIT=False, DM = 0.001, USE_R
 		#Gather the experimental data from the spectra file
 		#scales to be in mass (not mz), subtracts a baseline offset
 		exp_data=parsers.ExpSpectrumParser(BatchInfo.data_files[i],BatchInfo.charges[i])
+		if exp_data.m_hd is None:
+			print("An issue was encountered in " + BatchInfo.pep_names[i])
+			print("Skipping this peptide")
+			continue
 		m_hd=exp_data.m_hd #the 'heterodyne shift'
 
 		#Determine the number of points if AUTO_N.
@@ -132,12 +148,12 @@ def main(input_file, N = 65536, AUTO_N = True, PLOT_FIT=False, DM = 0.001, USE_R
 				params = saved_params.copy()
 
 		#Array of peptide information to be passed into the fitting package
-		logfile = input_file[:-3] + ".log"
-		fit = pysofit.FittingProblem(N,DM,AtomInfo,ResidueInfo, BatchInfo, i, params, m_hd, target, logfile)
+		#logfile = input_file[:-3] + ".log"
+		fit = pysofit.FittingProblem(N,DM,AtomInfo,ResidueInfo, BatchInfo, i, params, m_hd, target)#, logfile)
 		fit.fitschedule()
 
 		print("Fitting peptide: "+ str(BatchInfo.pep_names[i]))
-		if PLOT_FIT:
+		if PLOT_PROGRESS:
 			fit.plot()
 		if CARRY_OVER_PARAMS:
 			saved_params = fit.params.copy()
@@ -172,4 +188,4 @@ plotting = args.plotting
 cubic_interp = args.cubic_interp
 carry_over_params = args.carry_over_params
 
-main(input_file, PLOT_FIT = plotting, USE_RAW_DATA = not cubic_interp, CARRY_OVER_PARAMS = carry_over_params)
+main(input_file)#, USE_RAW_DATA = not cubic_interp, CARRY_OVER_PARAMS = carry_over_params)

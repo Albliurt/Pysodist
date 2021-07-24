@@ -8,16 +8,17 @@ import csv
 import options_parser
 
 options=options_parser.OptionsParser().options
+print(options)
 RFFT=True if options['rfft']=='True' else False
 HIGH_WEIGHT=float(options['peak_weight'])
-PLOT_PROGRESS=True if options['plot_progress']=='True' else False
+#PLOT_PROGRESS=True if options['plot_progress']=='True' else False
 PRINT_PROGRESS=True if options['print_progress']=='True' else False
 UPDATE_FREQUENCY=int(options['update_frequency'])
 MAX_ITERS=int(options['max_iters'])
 FTOL=float(options['ftol'])
 LOSS=options['loss']
 MATCH_HIGH_POINTS=False#True if options['match_high_points']=='True' else False
-CARRY_OVER_PARAMS=True if options['auto_save']=='True' else False
+#CARRY_OVER_PARAMS=True if options['auto_save']=='True' else False
 
 j=1j #imaginary unit
 
@@ -25,7 +26,7 @@ j=1j #imaginary unit
 
 class FittingProblem():
     #Overarching class that contains model generation and fitting
-    def __init__(self, N, dm, AtomInfo, ResidueInfo, BatchInfo, i, params, m_hd, target, logfile):
+    def __init__(self, N, dm, AtomInfo, ResidueInfo, BatchInfo, i, params, m_hd, target):#, logfile):
         self.N = N
         self.dm = dm
         self.m_hd = m_hd
@@ -85,9 +86,9 @@ class FittingProblem():
         self.masses = None
         self.residual = 0
 
-        self.logfile = logfile
-        with open(self.logfile, 'a', newline = None) as log:
-            log.write(self.BatchInfo.pep_names[self.pep_num] + "\n")
+        #self.logfile = logfile
+        #with open(self.logfile, 'a', newline = None) as log:
+        #    log.write(self.BatchInfo.pep_names[self.pep_num] + "\n")
 
     def Ft_Shift(self, shift):
         #Creates the fourier transform of a delta function, which functions as a shifter
@@ -267,56 +268,57 @@ class FittingProblem():
             line += self.params['var_atoms'].values()
             line += self.params['var_res'].values()
             param_writer.writerow(line)
-            print("Saved")
+            #print("Saved")
 
     def loground(self, roundnumber, header = False):
-        with open(self.logfile, mode = 'a', newline = None) as log:
-            if header:
-                line = "ROUND " + str(roundnumber) + "\tCHI_SQUARE"
-                if self.schedule['m_off'] == 1:
-                    line += "\tFREE M_OFF"
-                else:
-                    line += "\tFIX M_OFF"
+        #with open(self.logfile, mode = 'a', newline = None) as log:
+        if header:
+            line = "ROUND " + str(roundnumber) + "\tCHI_SQUARE"
+            if self.schedule['m_off'] == 1:
+                line += "\tFREE M_OFF"
+            else:
+                line += "\tFIX M_OFF"
 
-                if self.schedule['gw'] == 1:
-                    line += "\tFREE GW"
-                else:
-                    line += "\tFIX GW"
+            if self.schedule['gw'] == 1:
+                line += "\tFREE GW"
+            else:
+                line += "\tFIX GW"
 
-                if self.schedule['amps'] == 1:
-                    for species_name in self.ResidueInfo.species_names:
-                        line += "\tFREE AMP_"+species_name
-                else:
-                    for species_name in self.ResidueInfo.species_names:
-                        line += "\tFIX AMP_"+species_name
+            if self.schedule['amps'] == 1:
+                for species_name in self.ResidueInfo.species_names:
+                    line += "\tFREE AMP_"+species_name
+            else:
+                for species_name in self.ResidueInfo.species_names:
+                    line += "\tFIX AMP_"+species_name
 
-                if self.schedule['var_atoms'] == 1:
-                    for var_atom in self.params['var_atoms']:
-                        line += "\tFREE FRC_"+var_atom
-                else:
-                    for var_atom in self.params['var_atoms']:
-                        line += "\tFIX FRC_"+var_atom
+            if self.schedule['var_atoms'] == 1:
+                for var_atom in self.params['var_atoms']:
+                    line += "\tFREE FRC_"+var_atom
+            else:
+                for var_atom in self.params['var_atoms']:
+                    line += "\tFIX FRC_"+var_atom
 
-                if self.schedule['var_res'] == 1:
-                    for var_res in self.params['var_res']:
-                        line += "\tFREE FRC_"+var_res
-                else:
-                    for var_res in self.params['var_res']:
-                        line += "\tFIX FRC_"+var_res
-                line += "\n"
-                log.write(line)
-
-            line = "\t"+str("{:.4e}".format(self.residual)) +"\t" +"{:.4f}".format(self.params['m_off']) + "\t" + "{:.4f}".format(self.params['gw'])
-
-            normalized_amps = self.params['amps']/sum(self.params['amps'])
-            for amp in normalized_amps:
-                line += "\t"+"{:.4f}".format(amp)
-            for var_atom_value in self.params['var_atoms'].values():
-                line += "\t"+"{:.4f}".format(var_atom_value)
-            for var_res_value in self.params['var_res'].values():
-                line += "\t" + "{:.4f}".format(var_res_value)
+            if self.schedule['var_res'] == 1:
+                for var_res in self.params['var_res']:
+                    line += "\tFREE FRC_"+var_res
+            else:
+                for var_res in self.params['var_res']:
+                    line += "\tFIX FRC_"+var_res
             line += "\n"
-            log.write(line)
+            print(line)
+
+        line = "\t"+str("{:.4e}".format(self.residual)) +"\t" +"{:.4f}".format(self.params['m_off']) + "\t" + "{:.4f}".format(self.params['gw'])
+
+        normalized_amps = self.params['amps']/sum(self.params['amps'])
+        for amp in normalized_amps:
+            line += "\t"+"{:.4f}".format(amp)
+        for var_atom_value in self.params['var_atoms'].values():
+            line += "\t"+"{:.4f}".format(var_atom_value)
+        for var_res_value in self.params['var_res'].values():
+            line += "\t" + "{:.4f}".format(var_res_value)
+        line += "\n"
+        print(line)
+        #log.write(line)
 
     def estimate_intensity(self,mass):
         #Estimates the intensity of the experimental spectrum between two of the points, in order to compare the spectra
@@ -376,14 +378,14 @@ class FittingProblem():
 
         start = time.time()
         roundnumber = 1
-        print("Round " + str(roundnumber) + ": Amplitudes")
+        #print("Round " + str(roundnumber) + ": Amplitudes")
         # Fitting amplitudes preliminarily
         self.schedule['amps'] = 1
         self.scipy_optimize_ls()
         self.loground(roundnumber, True)
         roundnumber += 1
 
-        print("Round " + str(roundnumber) +": M_Off")
+        #print("Round " + str(roundnumber) +": M_Off")
         # Fitting m_off
         self.schedule['amps'] = 0
         self.schedule['m_off'] = 1
@@ -391,7 +393,7 @@ class FittingProblem():
         self.loground(roundnumber, True)
         roundnumber += 1
 
-        print("Round " + str(roundnumber) + ": M_Off + Gaussian Width")
+        #print("Round " + str(roundnumber) + ": M_Off + Gaussian Width")
         # Fitting gaussian width with m_off
         self.schedule['gw'] = 1
         self.scipy_optimize_ls()
@@ -400,7 +402,7 @@ class FittingProblem():
 
         # Fitting variable atoms
         if len(self.params['var_atoms']) > 0:
-            print("Round " + str(roundnumber) + ": Variable Atoms")
+            #print("Round " + str(roundnumber) + ": Variable Atoms")
             #Other parameters are not fit during this. Fit appears to work without them, though it is not what isodist does
             self.schedule['gw'] = 0
             self.schedule['m_off'] = 0
@@ -414,7 +416,7 @@ class FittingProblem():
 
         # Fitting variable residues (SILAC)
         if len(self.params['var_res']) > 0:
-            print("Round " + str(roundnumber) + ": Variable Residues")
+            #print("Round " + str(roundnumber) + ": Variable Residues")
             self.schedule['gw'] = 0
             self.schedule['m_off'] = 0
             self.schedule['amps'] = 0
@@ -423,7 +425,7 @@ class FittingProblem():
             self.loground(roundnumber, True)
             roundnumber += 1
 
-        print("Round " + str(roundnumber) + ": All Parameters")
+        #print("Round " + str(roundnumber) + ": All Parameters")
         # Fitting everything together
         self.schedule['amps'] = 1
         self.schedule['gw'] = 1
@@ -434,7 +436,7 @@ class FittingProblem():
             self.schedule['var_res'] = 1
         self.scipy_optimize_ls()
         self.loground(roundnumber, True)
-        print("Time to fit: " + str(time.time()-start))
+        #print("Time to fit: " + str(time.time()-start))
 
         #Normalize the amplitudes
         amp_sum = sum(self.params['amps'])
@@ -520,13 +522,13 @@ class FittingProblem():
             model_masses *= self.model_scale
         out = (model_masses-self.target_intensities)
         self.residual = sum(out**2)
-        print('Square Error: '+str(self.residual))
+        #print('Square Error: '+str(self.residual))
         return out
 
     def scipy_optimize_ls(self):
         #Runs the least square optimization algorithm with trust region bounds
         params = self.get_params()
         bounds = self.get_bounds()
-        print(self.params)
+        #print(self.params)
         scaled_tolerance = FTOL*(1e6/max(self.target_intensities))*(2.5e4/self.N)
         scipy.optimize.least_squares(self.compute_residual,params,bounds=bounds,ftol=scaled_tolerance,max_nfev=MAX_ITERS)
