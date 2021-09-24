@@ -83,6 +83,10 @@ class FittingProblem():
             self.mode='binned'
             #make target the Array type used:
             self.target_intensities=np.array(self.target)
+        avg_intensity = np.sum(self.target_intensities)/len(self.target_intensities)
+        self.params['amps'] = [float(avg_intensity)*val for val in self.params['amps']]
+        print(self.params['amps'])
+
         self.masses = None
         self.residual = 0
 
@@ -217,6 +221,7 @@ class FittingProblem():
         plt.plot(mass_axis,model_ys)
         plt.xlabel('mass')
         plt.ylabel('intensity')
+        plt.title(self.BatchInfo.pep_names[self.pep_num])
         plt.show()
 
     def calc_mw(self):
@@ -246,7 +251,7 @@ class FittingProblem():
             model_ys *= self.model_scale
 
         #Saves the spectrum in a tsv
-        f=open(model_tsv,'w')
+        f=open(model_tsv + ".fit",'w')
         for i in range(self.N):
             line=str(mass_axis[i]/charge)+', '+str(model_ys[i])+'\n'
             f.write(line)
@@ -254,19 +259,21 @@ class FittingProblem():
 
         peptide_sequence = self.BatchInfo.pep_names[self.pep_num]
         pep_name = peptide_sequence[1:3]
+        #print(pep_name)
         charge = self.BatchInfo.charges[self.pep_num]
         molecular_weight = self.calc_mw()
         mz = molecular_weight/charge
 
         #Saves the parameters in a csv
         with open(params_file, mode='a', newline=None) as f:
-            param_writer = csv.writer(f, lineterminator = '\n')
+            param_writer = csv.writer(f, lineterminator = '\n')#, na = "")
             line = [model_tsv, pep_name, peptide_sequence, molecular_weight, charge, self.residual, mz,
                 vert_shift,self.params['m_off'],self.params['gw']]
 
             line += self.params['amps']
             line += self.params['var_atoms'].values()
             line += self.params['var_res'].values()
+            print(line)
             param_writer.writerow(line)
             #print("Saved")
 
@@ -360,9 +367,9 @@ class FittingProblem():
         self.ResidueInfo.species_amps = params['amps']
         for i in range(len(self.var_atoms)):# atom in vector[3]:
             atom = self.var_atoms[i]
-            self.AtomInfo.atom_freqs[atom][1] = params['var_atom'][atom]
-            self.AtomInfo.atom_freqs[atom][0] = 1-params['var_atom'][atom]
-            self.params['var_atoms'][atom] = params['var_atom'][atom]
+            self.AtomInfo.atom_freqs[atom][1] = params['var_atoms'][atom]
+            self.AtomInfo.atom_freqs[atom][0] = 1-params['var_atoms'][atom]
+            self.params['var_atoms'][atom] = params['var_atoms'][atom]
         for i in range(len(self.var_res)):
             residue = self.var_res[i]
             self.ResidueInfo.res_freqs[residue][1:] = [params['var_res'][residue]]*(len(self.ResidueInfo.res_freqs[residue])-1)
@@ -370,6 +377,9 @@ class FittingProblem():
         self.masses = self.MakeModel()
         self.current_param = 'final'
         self.residual = sum(self.compute_residual()**2)
+        print(self.residual)
+        self.plot()
+        return self.residual
 
 
     def fitschedule(self):
@@ -436,7 +446,7 @@ class FittingProblem():
             self.schedule['var_res'] = 1
         self.scipy_optimize_ls()
         self.loground(roundnumber, True)
-        #print("Time to fit: " + str(time.time()-start))
+        print("Time to fit: " + str(time.time()-start))
 
         #Normalize the amplitudes
         amp_sum = sum(self.params['amps'])

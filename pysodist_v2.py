@@ -55,7 +55,7 @@ def main(input_file):
 	#Prints out the first row, which are the just the parameter names
 	params_csv = MainInfo.batchfile+".csv"
 	with open(params_csv, 'w', newline='') as f:
-		line = ["file","protein","peptide","mw","z_charge","chisq","mz","B","off","gw"]
+		line = ["file","protein","pep","mw","z_charge","chisq","mz","B","off","gw"]
 		for i in ResidueInfo.species_names:
 			line.append("AMP_" + str(i))
 		for i in range(len(ResidueInfo.atom_modes)):
@@ -160,7 +160,8 @@ def main(input_file):
 		################
 		#Saving the Fit
 		################
-		model_spectrum_tsv = BatchInfo.data_files[i][:-4]+'_FIT.tsv'
+		model_spectrum_tsv = BatchInfo.data_files[i][:-4]
+#		model_spectrum_fit = model_spectrum_tsv[:-4]+'.fit'
 		fit.save_fit(params_csv, model_spectrum_tsv, exp_data.vert_shift, BatchInfo.charges[i])
 
 
