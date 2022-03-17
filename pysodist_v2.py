@@ -17,14 +17,14 @@ import csv
 import options_parser
 
 options=options_parser.OptionsParser().options
-N = int(options['N'])
+#N = int(options['N'])
+#AUTO_N = True if options['auto_N'] == 'True' else False
+#EXP_BOX_SIZE = float(options['exp_box_size'])
+#USE_RAW_DATA = True if options['use_raw_data'] == 'True' else False
+
 DM = float(options['dm'])
-AUTO_N = True if options['auto_N'] == 'True' else False
-EXP_BOX_SIZE = float(options['exp_box_size'])
-USE_RAW_DATA = True if options['use_raw_data'] == 'True' else False
 CARRY_OVER_PARAMS = True if options['carry_over_params'] == 'True' else False
 PLOT_PROGRESS = True if options['plot_progress'] == 'True' else False
-
 sep_line="++++++++++++++++++++++++++++++++"
 
 os.chdir(workingpath)
@@ -124,16 +124,18 @@ def main(input_file):
 		m_hd=exp_data.m_hd #the 'heterodyne shift'
 
 		#Determine the number of points if AUTO_N.
-		if AUTO_N:
-			largest_exp_mass=exp_data.largest_mass
-			N=(largest_exp_mass-m_hd)//DM+1
-			if N%2==1:
-				N+=1
-			N=int(N)
-		if not USE_RAW_DATA:
-			target=exp_data.get_target_array_v1(N,DM,EXP_BOX_SIZE,m_hd) #does cubic interpolation
-		else:
-			target=exp_data.get_unbinned_target_array()
+		#if AUTO_N:
+		largest_exp_mass=exp_data.largest_mass
+		N=(largest_exp_mass-m_hd)//DM+1
+		if N%2==1:
+			N+=1
+		N=int(N)
+
+		#if not USE_RAW_DATA:
+		#	target=exp_data.get_target_array_v1(N,DM,EXP_BOX_SIZE,m_hd) #does cubic interpolation
+		#else:
+		target=exp_data.get_unbinned_target_array()
+
 		params['m_off'] = MainInfo.m_off_init
 		params['gw'] = MainInfo.gw_init
 		params['amps'] = ResidueInfo.species_amps
@@ -160,8 +162,7 @@ def main(input_file):
 		################
 		#Saving the Fit
 		################
-		model_spectrum_tsv = BatchInfo.data_files[i][:-4]
-#		model_spectrum_fit = model_spectrum_tsv[:-4]+'.fit'
+		model_spectrum_tsv = BatchInfo.data_files[i][:-4]+'.fit'
 		fit.save_fit(params_csv, model_spectrum_tsv, exp_data.vert_shift, BatchInfo.charges[i])
 
 

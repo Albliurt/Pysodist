@@ -9,16 +9,17 @@ import options_parser
 
 options=options_parser.OptionsParser().options
 print(options)
-RFFT=True if options['rfft']=='True' else False
-HIGH_WEIGHT=float(options['peak_weight'])
+#RFFT=True if options['rfft']=='True' else False
+#HIGH_WEIGHT=float(options['peak_weight'])
 #PLOT_PROGRESS=True if options['plot_progress']=='True' else False
-PRINT_PROGRESS=True if options['print_progress']=='True' else False
-UPDATE_FREQUENCY=int(options['update_frequency'])
+#PRINT_PROGRESS=True if options['print_progress']=='True' else False
+#UPDATE_FREQUENCY=int(options['update_frequency'])
 MAX_ITERS=int(options['max_iters'])
-FTOL=float(options['ftol'])
 LOSS=options['loss']
-MATCH_HIGH_POINTS=False#True if options['match_high_points']=='True' else False
-#CARRY_OVER_PARAMS=True if options['auto_save']=='True' else False
+
+FTOL=float(options['ftol'])
+MATCH_HIGH_POINTS=True if options['match_high_points']=='True' else False
+#CARRY_OVER_PARAMS=True if options['carry_over_params']=='True' else False
 
 j=1j #imaginary unit
 
@@ -69,24 +70,20 @@ class FittingProblem():
         self.ft_gauss = None
         self.schedule = {'amps': 0, 'm_off': 0, 'gw': 0, 'var_atoms': 0, 'var_res': 0}
 
-        if type(target[0]) is list:
-            self.mode='unbinned'
-            if MATCH_HIGH_POINTS:
-                self.target_max=max(target[1])
-                self.model_scale=1
-            self.target_masses=np.array(target[0])
-            self.target_intensities=np.array(target[1])
-        else:
-            if MATCH_HIGH_POINTS:
-                self.target_max=max(target)
-                self.model_scale=1
-            self.mode='binned'
-            #make target the Array type used:
-            self.target_intensities=np.array(self.target)
-        avg_intensity = np.sum(self.target_intensities)/len(self.target_intensities)
-        self.params['amps'] = [float(avg_intensity)*val for val in self.params['amps']]
-        print(self.params['amps'])
-
+        # if type(target[0]) is list:
+        self.mode='unbinned'
+        if MATCH_HIGH_POINTS:
+            self.target_max=max(target[1])
+            self.model_scale=1
+        self.target_masses=np.array(target[0])
+        self.target_intensities=np.array(target[1])
+        # else:
+        #     if MATCH_HIGH_POINTS:
+        #         self.target_max=max(target)
+        #         self.model_scale=1
+        #     self.mode='binned'
+        #     #make target the Array type used:
+        #     self.target_intensities=np.array(self.target)
         self.masses = None
         self.residual = 0
 
@@ -96,7 +93,7 @@ class FittingProblem():
 
     def Ft_Shift(self, shift):
         #Creates the fourier transform of a delta function, which functions as a shifter
-        array_size=self.N//2+1 if RFFT else self.N
+        array_size=self.N//2+1 # if RFFT else self.N
         m_idx=shift/self.dm
         temp_array = np.arange(0,array_size)
         fourier_array = np.exp((-2*pi*j*m_idx/self.N)*temp_array)
@@ -123,7 +120,7 @@ class FittingProblem():
         atom_masses = self.AtomInfo.atom_masses
         atom_freqs = self.AtomInfo.atom_freqs
         ft_atom_models = dict()
-        array_size=self.N//2+1 if RFFT else self.N
+        array_size=self.N//2+1 # if RFFT else self.N
         for atom in atom_masses:
             if self.ft_atom_models[atom] is None or atom in self.var_atoms:
                 fourier_array=np.zeros(array_size,dtype=complex)
@@ -214,14 +211,13 @@ class FittingProblem():
             model_max = max(model_ys)
             self.model_scale = self.target_max/model_max
             model_ys *= self.model_scale
-        if self.mode=='binned':
-            plt.scatter(mass_axis,self.target,color='red',s=5)
-        elif self.mode=='unbinned':
-            plt.scatter(self.target_masses,self.target_intensities,color='red',s=5)
+        #if self.mode=='binned':
+        #    plt.scatter(mass_axis,self.target,color='red',s=5)
+        #elif self.mode=='unbinned':
+        plt.scatter(self.target_masses,self.target_intensities,color='red',s=5)
         plt.plot(mass_axis,model_ys)
         plt.xlabel('mass')
         plt.ylabel('intensity')
-        plt.title(self.BatchInfo.pep_names[self.pep_num])
         plt.show()
 
     def calc_mw(self):
@@ -245,13 +241,13 @@ class FittingProblem():
         if self.m_hd is not None:
             mass_axis+=self.m_hd
         model_ys=self.masses
-        if MATCH_HIGH_POINTS:
-            model_max = max(model_ys)
-            self.model_scale = self.target_max/model_max
-            model_ys *= self.model_scale
+        # if MATCH_HIGH_POINTS:
+        #     model_max = max(model_ys)
+        #     self.model_scale = self.target_max/model_max
+        #     model_ys *= self.model_scale
 
         #Saves the spectrum in a tsv
-        f=open(model_tsv + ".fit",'w')
+        f=open(model_tsv,'w')
         for i in range(self.N):
             line=str(mass_axis[i]/charge)+', '+str(model_ys[i])+'\n'
             f.write(line)
@@ -259,21 +255,19 @@ class FittingProblem():
 
         peptide_sequence = self.BatchInfo.pep_names[self.pep_num]
         pep_name = peptide_sequence[1:3]
-        #print(pep_name)
         charge = self.BatchInfo.charges[self.pep_num]
         molecular_weight = self.calc_mw()
         mz = molecular_weight/charge
 
         #Saves the parameters in a csv
         with open(params_file, mode='a', newline=None) as f:
-            param_writer = csv.writer(f, lineterminator = '\n')#, na = "")
-            line = [model_tsv, pep_name, peptide_sequence, molecular_weight, charge, self.residual, mz,
+            param_writer = csv.writer(f, lineterminator = '\n')
+            line = [model_tsv[:-4], pep_name, peptide_sequence, molecular_weight, charge, self.residual, mz,
                 vert_shift,self.params['m_off'],self.params['gw']]
 
             line += self.params['amps']
             line += self.params['var_atoms'].values()
             line += self.params['var_res'].values()
-            print(line)
             param_writer.writerow(line)
             #print("Saved")
 
@@ -367,9 +361,9 @@ class FittingProblem():
         self.ResidueInfo.species_amps = params['amps']
         for i in range(len(self.var_atoms)):# atom in vector[3]:
             atom = self.var_atoms[i]
-            self.AtomInfo.atom_freqs[atom][1] = params['var_atoms'][atom]
-            self.AtomInfo.atom_freqs[atom][0] = 1-params['var_atoms'][atom]
-            self.params['var_atoms'][atom] = params['var_atoms'][atom]
+            self.AtomInfo.atom_freqs[atom][1] = params['var_atom'][atom]
+            self.AtomInfo.atom_freqs[atom][0] = 1-params['var_atom'][atom]
+            self.params['var_atoms'][atom] = params['var_atom'][atom]
         for i in range(len(self.var_res)):
             residue = self.var_res[i]
             self.ResidueInfo.res_freqs[residue][1:] = [params['var_res'][residue]]*(len(self.ResidueInfo.res_freqs[residue])-1)
@@ -377,9 +371,6 @@ class FittingProblem():
         self.masses = self.MakeModel()
         self.current_param = 'final'
         self.residual = sum(self.compute_residual()**2)
-        print(self.residual)
-        self.plot()
-        return self.residual
 
 
     def fitschedule(self):
@@ -446,7 +437,7 @@ class FittingProblem():
             self.schedule['var_res'] = 1
         self.scipy_optimize_ls()
         self.loground(roundnumber, True)
-        print("Time to fit: " + str(time.time()-start))
+        #print("Time to fit: " + str(time.time()-start))
 
         #Normalize the amplitudes
         amp_sum = sum(self.params['amps'])
@@ -520,16 +511,18 @@ class FittingProblem():
             self.set_params(param_vector)
         self.masses = self.MakeModel()
 
-        if self.mode=='binned':
-            model_masses = self.MakeModel()
-        elif self.mode == 'unbinned':
-            model_masses=list(map(lambda mass:self.estimate_intensity(mass-self.m_hd),self.target_masses))
-            model_masses=np.array(model_masses)
+        #if self.mode=='binned':
+        #    model_masses = self.MakeModel()
+        #elif self.mode == 'unbinned':
+        model_masses=list(map(lambda mass:self.estimate_intensity(mass-self.m_hd),self.target_masses))
+        model_masses=np.array(model_masses)
 
         if MATCH_HIGH_POINTS:
             model_max = max(model_masses)
             self.model_scale = self.target_max/model_max
             model_masses *= self.model_scale
+            self.masses *= self.model_scale
+
         out = (model_masses-self.target_intensities)
         self.residual = sum(out**2)
         #print('Square Error: '+str(self.residual))
