@@ -249,7 +249,7 @@ class FittingProblem():
         #Saves the spectrum in a tsv
         f=open(model_tsv,'w')
         for i in range(self.N):
-            line=str(mass_axis[i]/charge)+', '+str(model_ys[i])+'\n'
+            line=str(mass_axis[i])+', '+str(model_ys[i])+'\n'
             f.write(line)
         f.close()
 
