@@ -277,7 +277,7 @@ class FittingProblem():
         # with scipy.fft.set_backend(pyfftw.interfaces.scipy_fft):
             # returnspectrum = scipy.fft.irfft(model)
         #print(model)
-        returnspectrum = irfft(model)
+        returnspectrum = irfft(model, n = self.N)
         self.totalmodelgen += 1
         #self.totaltime += time.time() - starttime
         return returnspectrum#irfft(model)
