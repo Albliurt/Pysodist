@@ -162,29 +162,6 @@ def main(input_file):
 		################
 		model_spectrum_tsv = BatchInfo.data_files[i][:-4]+'.fit'
 		fit.save_fit(params_csv, model_spectrum_tsv, exp_data.vert_shift, BatchInfo.charges[i])
-		print("Atom: " + str(fit.time1/fit.timing))
-		print("Residue: " + str(fit.time2/fit.timing))
-		print("Stick: " + str(fit.time3/fit.timing))
-		print("Rest: " + str(fit.time4/fit.timing))
-		print("Total: " + str(fit.timing))
-		print(str(fit.time_m/fit.timing))
-		print(str(fit.time_f/fit.timing))
-		print(str(time.time()-starttime))
-		print(str(fit.a/fit.timing))
-
-
-
-		#if not AUTO_SAVE:
-		#	print('\nSaving fit data to:',results_tsv)
-		#	fit.save_fit(results_tsv,exp_data.vert_shift,BatchInfo.charges[i]) #extra data here is because have to undo normalizations before saving
-		#else:
-		#	save_loc=BatchInfo.data_files[i][:-4]+'_FIT.tsv'
-		#	print('\nSaving fit data to:',save_loc)
-		#	fit.save_fit(save_loc,exp_data.vert_shift,BatchInfo.charges[i])
-	# endtime = time.time()
-	# print("Total time: "+ str(endtime-starttime))
-	# print("x time: " + str(totaltime))
-	# print(fit.asdf)
 
 
 #Parsing command line arguments to be passed in. Not necessary when putting everything together

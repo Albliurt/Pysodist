@@ -1,8 +1,7 @@
 import numpy as np
 import scipy.optimize
 import matplotlib.pyplot as plt
-#from numpy.fft import fft,ifft,rfft,irfft
-from numpy.fft import rfft, irfft#, set_global_backend
+from numpy.fft import rfft, irfft
 from math import pi,e,ceil,floor
 import time
 import csv
@@ -14,7 +13,6 @@ options=options_parser.OptionsParser().options
 print(options)
 MAX_ITERS=int(options['max_iters'])
 LOSS=options['loss']
-
 FTOL=float(options['ftol'])
 MATCH_HIGH_POINTS=True if options['match_high_points']=='True' else False
 j=1j #imaginary unit
@@ -48,9 +46,7 @@ class FittingProblem():
 
         self.var_atoms = [atom for atom in self.params['var_atoms']]
         #Stores the indices of the variable atoms in the atom arrays, in order to reduce convolutions needed later
-        '''#if not len(self.var_atoms) == 0:'''
         self.var_atom_index = [self.ResidueInfo.atom_names.index(atom) for atom in self.var_atoms]
-
         self.var_res = [res for res in self.params['var_res']]
 
         self.target = target
@@ -72,8 +68,6 @@ class FittingProblem():
         #To reduce convolution time, ft_nonvar_residue_models contains residue spectra except for the variable atom, which is convolved later
         #These should remain constant after initialization
         #They are lists of dictionaries. n dictionaries for n species, with keys as residues
-
-        '''if not len(self.var_atoms) == 0:'''
         self.ft_nonvar_residue_models = []
         for i in range(self.ResidueInfo.num_species):
             res_init = dict()
@@ -81,7 +75,6 @@ class FittingProblem():
                 res_init[res] = None
             self.ft_residue_models.append(res_init)
             self.unmixed_ft_residue_models.append(res_init.copy())
-            '''if not len(self.var_atoms) == 0:'''
             self.ft_nonvar_residue_models.append(res_init.copy())
 
 
@@ -119,14 +112,12 @@ class FittingProblem():
 
         returns: Fourier transformed delta function
         '''
-        s = time.time()
         #mass_array = (-2*pi*j*shift/(self.N*self.dm))*np.arange(self.N//2+1)
         #self.time_m += time.time() - s
 
         fourier_array = np.exp((-2*pi*j*shift/(self.N*self.dm))*np.arange(self.N//2+1))
         # fourier_array = np.exp(1j*np.arange(self.N//2+1))
         # fourier_array = np.power(fourier_array, (-2*pi*shift/(self.N*self.dm)))
-        self.time_f += time.time() - s
         return fourier_array
 
     def Convolution(self, ft_spectra,mults,names=None):
@@ -268,39 +259,28 @@ class FittingProblem():
         Computes a stick spectrum, Gaussian, and necessary shifts, and then convolves them.
 
         returns: mass domain theoretical spectrum'''
-        starttime = time.time()
         if self.schedule['var_atoms'] == 1 or self.ft_stick is None:
             self.AtomSpectrum()
 
-        temptime = time.time()
-        self.time1 += temptime - starttime
         if self.schedule['var_atoms'] == 1 or self.ft_stick is None or self.schedule['var_res'] == 1:
             self.ResidueSpectrum()
-            self.time2 += time.time() - temptime
-            temptime = time.time()
-
             self.Ft_StickSpectrum()
-            self.time3 += time.time() - temptime
-            temptime = time.time()
+
         elif self.schedule['amps'] == 1:
             self.Ft_StickSpectrum()
-            self.time3 += time.time() - temptime
-            temptime = time.time()
+
         if self.schedule['gw'] == 1 or self.ft_gauss is None:
             self.Ft_Gaussian()
 
         stick = self.ft_stick
         gauss = self.ft_gauss
 
-        self.time4 += time.time()-temptime
 
         shift = self.Ft_Shift(-self.m_hd)
         m_off_shift = self.Ft_Shift(-self.params['m_off'])
 
         model = self.Convolution([stick,gauss,shift, m_off_shift],[1,1,1,1])
         returnspectrum = irfft(model, n = self.N)
-        self.timing += time.time() - starttime
-        # self.timing += time.time() - starttime
 
         return returnspectrum
 
