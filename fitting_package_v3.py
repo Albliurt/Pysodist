@@ -48,8 +48,9 @@ class FittingProblem():
 
         self.var_atoms = [atom for atom in self.params['var_atoms']]
         #Stores the indices of the variable atoms in the atom arrays, in order to reduce convolutions needed later
-        if not len(self.var_atoms) == 0:
-            self.var_atom_index = [self.ResidueInfo.atom_names.index(atom) for atom in self.var_atoms]
+        '''#if not len(self.var_atoms) == 0:'''
+        self.var_atom_index = [self.ResidueInfo.atom_names.index(atom) for atom in self.var_atoms]
+
         self.var_res = [res for res in self.params['var_res']]
 
         self.target = target
@@ -71,16 +72,17 @@ class FittingProblem():
         #To reduce convolution time, ft_nonvar_residue_models contains residue spectra except for the variable atom, which is convolved later
         #These should remain constant after initialization
         #They are lists of dictionaries. n dictionaries for n species, with keys as residues
-        if not len(self.var_atoms) == 0:
-            self.ft_nonvar_residue_models = []
+
+        '''if not len(self.var_atoms) == 0:'''
+        self.ft_nonvar_residue_models = []
         for i in range(self.ResidueInfo.num_species):
             res_init = dict()
             for res in self.ResidueInfo.residue_info:
                 res_init[res] = None
             self.ft_residue_models.append(res_init)
             self.unmixed_ft_residue_models.append(res_init.copy())
-            if not len(self.var_atoms) == 0:
-                self.ft_nonvar_residue_models.append(res_init.copy())
+            '''if not len(self.var_atoms) == 0:'''
+            self.ft_nonvar_residue_models.append(res_init.copy())
 
 
         self.ft_species_models = []
@@ -109,6 +111,7 @@ class FittingProblem():
         self.time_f = 0
         self.a = 0
         self.count = 0
+        self.iss = 0
 
     def Ft_Shift(self, shift):
         '''Generates the Fourier transform of a delta functions, which shifts a spectrum by the shift amount
@@ -162,6 +165,7 @@ class FittingProblem():
 
         returns: linearly combined spectrum in the Fourier domain, containing the sum of amps[i]*spectra[i]
         '''
+
         return np.dot(amps, spectra)
 
     def AtomSpectrum(self):
@@ -242,7 +246,10 @@ class FittingProblem():
         ft_species_models = [self.Convolution(ft_residue_models[k], mults, syms) for k in range(res.num_species)]
         self.ft_species_models = ft_species_models
 
+        self.iss = 1
+
         self.ft_stick = self.LinCombFt(ft_species_models, res.species_amps)
+        self.iss = 0
 
     def Ft_Gaussian(self):
         '''Makes a Gaussian mass array with a given gw, specified by the fitting parameter 'gw'
@@ -445,6 +452,7 @@ class FittingProblem():
         if self.schedule['var_res']==1:
             for res in self.var_res:
                 params.append(self.params['var_res'][res])
+
         return params
 
     # def testParams(self, params):
@@ -544,6 +552,7 @@ class FittingProblem():
     def set_params(self,vector):
         '''Sets the model parameters based on a vector. Determines which parameters are specified by checking
         the fitting schedule'''
+
         if self.schedule['m_off'] == 1:
             self.params['m_off'] = vector[0]
             vector = vector[1:]
@@ -615,6 +624,7 @@ class FittingProblem():
         chi-square calculation as necessary later.
         '''
         #Computes the chi square residual, as well as the residual vector
+
         if not self.current_param == 'final':
             self.set_params(param_vector)
         self.masses = self.MakeModel()
