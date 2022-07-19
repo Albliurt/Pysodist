@@ -8,7 +8,7 @@ you might find ftol needs to adjusted as well.
 One
 
 General Settings:
--> plot_progress = False #(defualt False) Will display matplotlib plots as fitting proceeds so you can see how it's doing
+-> plot_progress = False #(default False) Will display matplotlib plots as fitting proceeds so you can see how it's doing
 
 Preprocessing Settings:
 -> dm = .001 #(default .01) mass increment in model m/z array (smaller=finer gradations=bigger N array (if auto_N)=more accurate=slower)

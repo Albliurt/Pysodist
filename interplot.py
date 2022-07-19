@@ -57,6 +57,7 @@ ResidueInfo = parsers.ResInfoParser(resfile, AtomInfo)
 #sequence += 'Z' + charge*'X'
 res_syms = list(set(sequence + 'Z' + charge*'X'))
 res_mults = list(map(lambda sym:str.count(sequence + 'Z' + charge*'X',sym),res_syms))
+print(res_mults)
 
 def computeNmw(sequence, charge):
     global res_syms
@@ -66,13 +67,19 @@ def computeNmw(sequence, charge):
 
     res_syms = list(set(sequence + 'Z' + charge*'X'))
     res_mults = list(map(lambda sym:str.count(sequence + 'Z' + charge*'X',sym),res_syms))
+    atoms = np.zeros(len(ResidueInfo.residue_info[res_syms[0]][0]))
+    print(res_syms)
+    print(res_mults)
 
     mw = 0
     labeled_mass_diff = 0
     mass_pad = left_mass_pad + right_mass_pad
     for i in range(len(res_syms)):
         atom_mult = ResidueInfo.residue_info[res_syms[i]][0]
+        print(res_syms[i])
+        print(res_mults[i]*atom_mult)
         for k in range(len(atom_mult)):
+            atoms[k] += res_mults[i]*atom_mult[k]
             mw += atom_mult[k]*AtomInfo.atom_masses[ResidueInfo.atom_names[k]][0]*res_mults[i]
             if 'C13' in labeling and 'C' in ResidueInfo.atom_names[k]:
                 labeled_mass_diff += 1.003355*res_mults[i]*atom_mult[k]
@@ -80,8 +87,10 @@ def computeNmw(sequence, charge):
                 labeled_mass_diff += 0.997035*res_mults[i]*atom_mult[k]
     print('Molecular weight: ' + str(mw))
     print('Mass window: ' + str(mw - left_mass_pad) + ' - ' + str(right_mass_pad + mw + labeled_mass_diff))
-
+    print(atoms)
     N = int((labeled_mass_diff+mass_pad)//dm + 1)
+
+    print(atom_mult)
 
 #Overarching spectrum generating function, which is called during the start
 #and also called during any "update" event - when the sliders are changed
@@ -230,7 +239,7 @@ for i in range(len(ResidueInfo.atom_names)):
     if ResidueInfo.atom_modes[i] == "variable" or ResidueInfo.atom_modes[i] == "fixed":
         var_atom_names.append(ResidueInfo.atom_names[i])
         var_atom_slider_axs.append(fig.add_axes([0.2, 0.3 - len(var_atom_sliders)*0.05, 0.25, 0.015]))#, facecolor=axis_color)
-        var_atom_sliders.append(Slider(var_atom_slider_axs[-1], 'Label Freq: ' + ResidueInfo.atom_names[i], 0.1, 1.0, valinit= AtomInfo.atom_freqs[ResidueInfo.atom_names[i]][1]))
+        var_atom_sliders.append(Slider(var_atom_slider_axs[-1], 'Label Freq: ' + ResidueInfo.atom_names[i], 0.0, 1.0, valinit= AtomInfo.atom_freqs[ResidueInfo.atom_names[i]][1]))
 
 amp_sliders = []
 amp_slider_axs = []
