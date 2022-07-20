@@ -14,13 +14,12 @@ print(options)
 MAX_ITERS=int(options['max_iters'])
 LOSS=options['loss']
 FTOL=float(options['ftol'])
-MATCH_HIGH_POINTS=True if options['match_high_points']=='True' else False
 j=1j #imaginary unit
 
 
 
 class FittingProblem():
-    def __init__(self, N, dm, AtomInfo, ResidueInfo, BatchInfo, i, params, m_hd, target):#, logfile):
+    def __init__(self, N, dm, AtomInfo, ResidueInfo, BatchInfo, i, params, m_hd, target, match_high_points = False):#, logfile):
         """
         Overarching class that contains model generation and fitting
         :param N: number of data points in the spectrum to be generated. Determined by pysodist - if auto_N, then it is the mass range divided by dm
@@ -54,10 +53,10 @@ class FittingProblem():
 
         #Defines separately the "unmixed" atom models which are the fourier transform of delta functions
         #Since only the atom frequencies change, these unmixed models are added at given frequencies
-        self.unmixed_ft_atom_models = dict()
+        self.single_isotope_atom_models = dict()
         self.ft_atom_models = dict()
         for atom in self.AtomInfo.atom_masses:
-            self.unmixed_ft_atom_models[atom] = [np.exp((-2*pi*j/self.N)*(AtomInfo.atom_masses[atom][i]/self.dm)*np.arange(self.N//2+1)) for i in range(len(AtomInfo.atom_masses[atom]))]
+            self.single_isotope_atom_models[atom] = [np.exp((-2*pi*j/self.N)*(AtomInfo.atom_masses[atom][i]/self.dm)*np.arange(self.N//2+1)) for i in range(len(AtomInfo.atom_masses[atom]))]
             self.ft_atom_models[atom] = None
 
         #For SILAC experiments, variable residues can be computed by computing separate labeling schemes and adding them
@@ -65,46 +64,38 @@ class FittingProblem():
         self.unmixed_ft_residue_models = []
         self.ft_residue_models = []
 
-        #To reduce convolution time, ft_nonvar_residue_models contains residue spectra except for the variable atom, which is convolved later
+        #To reduce convolution time, ft_prevariable_residue_models contains residue spectra except for the variable atom, which is convolved later
         #These should remain constant after initialization
         #They are lists of dictionaries. n dictionaries for n species, with keys as residues
-        self.ft_nonvar_residue_models = []
+        self.ft_prevariable_residue_models = []
         for i in range(self.ResidueInfo.num_species):
             res_init = dict()
-            for res in self.ResidueInfo.residue_info:
+            for res in self.ResidueInfo.residue_composition:
                 res_init[res] = None
             self.ft_residue_models.append(res_init)
             self.unmixed_ft_residue_models.append(res_init.copy())
-            self.ft_nonvar_residue_models.append(res_init.copy())
+            self.ft_prevariable_residue_models.append(res_init.copy())
 
 
         self.ft_species_models = []
-        self.ft_stick = None
+        self.ft_stick_model = None
         self.ft_gauss = None
         self.schedule = {'amps': 0, 'm_off': 0, 'gw': 0, 'var_atoms': 0, 'var_res': 0}
 
         self.mode='unbinned'
         #Optional scaling for some peptides. If the highest point in the target spectrum is the desired peak, then this scales the generated spectrum to the target
-        if MATCH_HIGH_POINTS:
+        self.match_high_points = match_high_points
+        if match_high_points:
             self.target_max=max(target[1])
             self.model_scale=1
+
+
         self.target_masses=np.array(target[0])
         self.shifted_masses = self.target_masses - self.m_hd
         self.target_intensities=np.array(target[1])
 
         self.masses = None
         self.residuals = None
-
-        self.timing = 0
-        self.time1 = 0
-        self.time2 = 0
-        self.time3 = 0
-        self.time4 = 0
-        self.time_m = 0
-        self.time_f = 0
-        self.a = 0
-        self.count = 0
-        self.iss = 0
 
     def Ft_Shift(self, shift):
         '''Generates the Fourier transform of a delta functions, which shifts a spectrum by the shift amount
@@ -141,12 +132,6 @@ class FittingProblem():
             else:
                 conv *= ft_spectra[names[i]]**mults[i]
 
-            # temp = np.ones(length, dtype = complex)
-            # spec = ft_spectra[names[i]]
-            # for j in range(mults[i]):
-            #    temp *= spec#ft_spectra[names[i]]
-            # conv *= temp
-
         return conv
 
     def LinCombFt(self, spectra,amps):
@@ -167,61 +152,65 @@ class FittingProblem():
         '''
         atom_masses = self.AtomInfo.atom_masses
         atom_freqs = self.AtomInfo.atom_freqs
-        unmixed_ft_atom_models = self.unmixed_ft_atom_models
+
+        single_isotope_atom_models = self.single_isotope_atom_models
         ft_atom_models = self.ft_atom_models
 
         for atom in atom_masses:
             if ft_atom_models[atom] is None or atom in self.var_atoms:
-                ft_atom_models[atom] = np.dot(atom_freqs[atom], unmixed_ft_atom_models[atom])#fourier_array
+                ft_atom_models[atom] = np.dot(atom_freqs[atom], single_isotope_atom_models[atom])#fourier_array
         self.ft_atom_models = ft_atom_models
 
 
     def ResidueSpectrum(self):
         '''Creates the residue spectra by convolving atomic spectra together. Differently labeled residues are then added together based on
         specified fractions based on the particular labeling scheme (SILAC). Saved in the instance variable ft_residue_models. Additionally,
-        initializes/modified unmixed_ft_residue_models and ft_nonvar_residue_models
+        initializes/modified unmixed_ft_residue_models and ft_prevariable_residue_models
 
         returns: None'''
         ft_atom_models = self.ft_atom_models
-        res = self.ResidueInfo
-        ft_residue_models = [{} for i in range(res.num_species)]
-        res_info = res.residue_info
-        res_freqs = res.res_freqs
+
+        ResidueInfo = self.ResidueInfo
+        Pep_mults, Pep_syms = self.PeptideInfo
+        ft_residue_models = [{} for i in range(ResidueInfo.num_species)]
+        residue_composition = ResidueInfo.residue_composition
+        res_freqs = ResidueInfo.res_freqs
+
         unmixed_ft_residue_models = self.unmixed_ft_residue_models
-        ft_nonvar_residue_models = self.ft_nonvar_residue_models
+        ft_prevariable_residue_models = self.ft_prevariable_residue_models
 
-
-        for residue in res_info:
-            for i in range(res.num_species):
-                #print(self.unmixed_ft_residue_models[i][residue])
-                if ft_nonvar_residue_models[i][residue] is None:
-                    temp_copy = res_info[residue][i].copy()
-                    names = res.atom_names.copy()
-                    popped = 0
+        for residue in Pep_syms: #Only relevant residues computed #residue_composition:
+            for i in range(ResidueInfo.num_species):
+                #If ft_prevariable_residue_models has not yet been initialized
+                #Pop out the atoms that are variable, and then compute the convolution
+                if ft_prevariable_residue_models[i][residue] is None:
+                    temp_copy = residue_composition[residue][i].copy()
+                    names = ResidueInfo.atom_names.copy()
+                    num_popped = 0
                     for k in self.var_atom_index:
-                        temp_copy.pop(k-popped)
-                        names.pop(k-popped)
-                        popped += 1
-                    ft_nonvar_residue_models[i][residue] = self.Convolution(ft_atom_models,temp_copy, names)
+                        temp_copy.pop(k-num_popped)
+                        names.pop(k-num_popped)
+                        num_popped += 1
+                    ft_prevariable_residue_models[i][residue] = self.Convolution(ft_atom_models,temp_copy, names)
 
+                #If unmixed_ft_residue_models is uninitialized or if variable atom frequencies
+                #are being modified, the unmixed_ft_residue_models are changed
                 if unmixed_ft_residue_models[i][residue] is None or self.schedule['var_atoms'] == 1:
-                    ft_atom_models['Def'] = ft_nonvar_residue_models[i][residue]
-                    names = ['Def']
+                    ft_atom_models['Fixed_model'] = ft_prevariable_residue_models[i][residue]
+                    names = ['Fixed_model']
                     mults = [1]
                     for k in self.var_atom_index:
-                        names.append(res.atom_names[k])
-                        mults.append(res_info[residue][i][k])
+                        names.append(ResidueInfo.atom_names[k])
+                        mults.append(residue_composition[residue][i][k])
                     unmixed_ft_residue_models[i][residue] = self.Convolution(ft_atom_models, mults, names)
 
+                #Linear combination of the unmixed models to form final residue models
+                #The frequencies are 1 (all one model) unless there is a variable/fixed residue (not default)
                 if self.ft_residue_models[i][residue] is None or (residue in self.var_res and self.schedule['var_res'] == 1 and not i == 0) or self.schedule['var_atoms'] == 1:
-                    starttime = time.time()
                     ft_residue_models[i][residue] = self.LinCombFt([unmixed_ft_residue_models[i][residue], unmixed_ft_residue_models[0][residue]],[res_freqs[residue][i], (1-res_freqs[residue][i])])
                     #ft_residue_models[i][residue] = res_freqs[residue][i]*unmixed_ft_residue_models[i][residue] + (1-res_freqs[residue][i])*unmixed_ft_residue_models[0][residue]
-                    self.a += time.time()-starttime
                     self.ft_residue_models[i][residue] = ft_residue_models[i][residue]
-                    # self.count += 1
-                    # print(self.count)
-                # self.a += time.time()-starttime
+
         self.unmixed_ft_residue_models = unmixed_ft_residue_models
 
     def Ft_StickSpectrum(self):
@@ -230,17 +219,12 @@ class FittingProblem():
 
         returns: None
         '''
-        res = self.ResidueInfo
+        ResidueInfo = self.ResidueInfo
         ft_residue_models = self.ft_residue_models
-        res_info = res.residue_info
         mults, syms = self.PeptideInfo
-        ft_species_models = [self.Convolution(ft_residue_models[k], mults, syms) for k in range(res.num_species)]
+        ft_species_models = [self.Convolution(ft_residue_models[k], mults, syms) for k in range(ResidueInfo.num_species)]
         self.ft_species_models = ft_species_models
-
-        self.iss = 1
-
-        self.ft_stick = self.LinCombFt(ft_species_models, res.species_amps)
-        self.iss = 0
+        self.ft_stick_model = self.LinCombFt(ft_species_models, ResidueInfo.species_amps)
 
     def Ft_Gaussian(self):
         '''Makes a Gaussian mass array with a given gw, specified by the fitting parameter 'gw'
@@ -259,10 +243,10 @@ class FittingProblem():
         Computes a stick spectrum, Gaussian, and necessary shifts, and then convolves them.
 
         returns: mass domain theoretical spectrum'''
-        if self.schedule['var_atoms'] == 1 or self.ft_stick is None:
+        if self.schedule['var_atoms'] == 1 or self.ft_stick_model is None:
             self.AtomSpectrum()
 
-        if self.schedule['var_atoms'] == 1 or self.ft_stick is None or self.schedule['var_res'] == 1:
+        if self.schedule['var_atoms'] == 1 or self.ft_stick_model is None or self.schedule['var_res'] == 1:
             self.ResidueSpectrum()
             self.Ft_StickSpectrum()
 
@@ -272,7 +256,7 @@ class FittingProblem():
         if self.schedule['gw'] == 1 or self.ft_gauss is None:
             self.Ft_Gaussian()
 
-        stick = self.ft_stick
+        stick = self.ft_stick_model
         gauss = self.ft_gauss
 
 
@@ -293,7 +277,7 @@ class FittingProblem():
         if self.m_hd is not None:
             mass_axis+=self.m_hd
         model_ys = self.masses
-        if MATCH_HIGH_POINTS:
+        if self.match_high_points:
             model_max = max(model_ys)
             self.model_scale = self.target_max/model_max
             model_ys *= self.model_scale
@@ -309,13 +293,13 @@ class FittingProblem():
         returns: monoisotopic molecular_weight
         '''
         atom_masses = self.AtomInfo.atom_masses
-        res = self.ResidueInfo
+        ResidueInfo = self.ResidueInfo
         res_mults, res_syms = self.PeptideInfo
         mw = 0
         for i in range(len(res_syms)):
-            atom_mult = res.residue_info[res_syms[i]][0]
+            atom_mult = ResidueInfo.residue_composition[res_syms[i]][0]
             for k in range(len(atom_mult)):
-                mw += atom_mult[k]*atom_masses[res.atom_names[k]][0]*res_mults[i]
+                mw += atom_mult[k]*atom_masses[ResidueInfo.atom_names[k]][0]*res_mults[i]
         return mw
 
 
@@ -615,7 +599,7 @@ class FittingProblem():
         model_masses=np.array(model_masses)
 
 
-        if MATCH_HIGH_POINTS:
+        if self.match_high_points:
             model_max = max(model_masses)
             self.model_scale = self.target_max/model_max
             model_masses *= self.model_scale

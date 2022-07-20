@@ -5,9 +5,9 @@ from scipy.interpolate import interp1d
 from math import pi,e
 
 class MainInfoParser(): #parses the .in file to hold relevant variables
-    def __init__(self,infile):
-        self.file=infile
-        f=open(infile,'r')
+    def __init__(self, in_file):
+        self.file=in_file
+        f=open(in_file,'r')
         self.opt = f.readline().split()[0]
 
         self.batchfile = f.readline().split()[0]
@@ -30,6 +30,7 @@ class AtomInfoParser(): #parses the atom model file to hold relevant data - mass
         self.file = file
         self.atom_masses = dict()
         self.atom_freqs = dict()
+
         reading=True
         current_atom=None
         f = open(self.file,'r')
@@ -57,9 +58,9 @@ class ResInfoParser(): #parses the residue model file. Gives the variable residu
         ##################
 
         #Parse the species data - number of species and initial amplitudes
-        num_species = int(f.readline().split()[0])
-        species_names=[]
-        species_amps=[]
+        num_species = int(f.readline().split()[0]) #number of species
+        species_names=[] #U, L, F, etc. Name of the species (labeling condition)
+        species_amps=[] #Amplitudes of each species
         for i in range(num_species):
             line=f.readline().split()
 
@@ -67,11 +68,10 @@ class ResInfoParser(): #parses the residue model file. Gives the variable residu
             species_amps.append(float(line[1]))
 
         #Parse the variable atoms and their initial values
-        n_var_atoms = 0 #number of variable atoms
-        num_atoms = int(f.readline().split()[0]) #number of atom types: "elements"
-        atom_names = []
-        atom_init_values = [] #Labeled atoms. Need to allow this to override the atoms
-        atom_modes = []
+        num_atoms = int(f.readline().split()[0]) #number of atom types in model: C, H, N, O, S, and variable atoms, etc.
+        atom_names = [] #Elemental symbol
+        atom_init_values = [] #Initial frequency of special atoms (variable or fixed)
+        atom_modes = [] #How to treat the special atoms
 
         for i in range(num_atoms):
             line=f.readline().split()
@@ -83,20 +83,22 @@ class ResInfoParser(): #parses the residue model file. Gives the variable residu
                 atom_init_values.append(None)
 
         #residues multiplicity of atoms
-        residue_info=dict() #keys are symbols, values lists of atom multiplicities
+        residue_composition=dict() #keys are symbols, values lists of atom multiplicities
         #one for each species
         reading=True
-        residue_names = []
-        n_var_res = 0
-        residue_modes = []
-        residue_init_values = []
-        res_freqs = dict()
+        residue_names = [] #One letter identifier for amino acids
+        residue_modes = [] #Modes for each amino acid, for SILAC
+        residue_init_values = [] #Initial frequencies for special residues
+        res_freqs = dict() #Dictionary for frequencies overall. Frequency is just 1
+        #for most residues, but are set to be the values in residue_init_values in
+        #pysodist
+
         while reading:
             line = f.readline()
-            #print(line)
             if line=='':
                 reading=False
                 break
+
             current_res = line.split()[0]
             current_mode = line.split()[1]
 
@@ -106,22 +108,25 @@ class ResInfoParser(): #parses the residue model file. Gives the variable residu
                 residue_init_values.append(float(line.split()[2]))
             except:
                 residue_init_values.append(None)
-            residue_info[current_res] = []
+
+            residue_composition[current_res] = []
             res_freqs[current_res] = []
+
             for i in range(num_species):
                 a = f.readline()
-                #print(a)
                 line=list(map(int,a.split()[:num_atoms]))
-                residue_info[current_res].append(line)
+                residue_composition[current_res].append(line)
                 res_freqs[current_res].append(1)
 
         self.atom_names = atom_names
         self.atom_init_values = atom_init_values
         self.atom_modes = atom_modes
-        self.residue_info = residue_info
+
+        self.residue_composition = residue_composition
         self.residue_modes = residue_modes
         self.residue_names = residue_names
         self.residue_init_values = residue_init_values
+
         self.species_amps = species_amps
         self.species_names = species_names
         self.num_species = num_species
@@ -131,12 +136,11 @@ class BatchInfoParser(): #Parses the batch file in the input file. Gives the seq
     def __init__(self, batch_file):
         f=open(batch_file,'r')
         #f.readline() #skip header line
-        batch_models=[]
-        batch_syms = []
-        batch_mults = []
-        charges=[]
-        data_files=[]
-        pep_names=[]
+        batch_syms = [] #List of symbols for each peptide. Used as index for multiplicities
+        batch_mults = [] #Multiplicities for number of each residue in a peptide
+        charges=[] #Charges for each peptide
+        data_files=[] #File path for each peptide's spectrum file
+        pep_names=[] #Sequence of the peptide on paper, without added protons/water
         reading=True
         while reading:
             line = f.readline()
@@ -144,12 +148,14 @@ class BatchInfoParser(): #Parses the batch file in the input file. Gives the seq
                 break
             line=line.split()
             pepseq=line[0]
+
             charge=int(line[1])
             charges.append(charge)
             data_files.append(line[2]) #skip over retentiontime
             #build batch_model
             pep_names.append(pepseq)
             pepseq+='Z'+charge*'X'#adds on a water and protons
+
             res_syms = list(set(pepseq))
             batch_syms.append(res_syms)
             res_mults = list(map(lambda sym:str.count(pepseq,sym),res_syms))
