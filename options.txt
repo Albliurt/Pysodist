@@ -1,0 +1,22 @@
+#######################
+#PYSODIST OPTIONS FILE#
+#######################
+This file is read on running pysodist.py and can be used to experiment with different settings
+Be careful with formatting, every setting line should begin '-> [setting_name] = [setting_value] ' where the spaces matter
+Keep in mind that some of the settings are interconnected. For example, if you change to interpolated mass spec data by setting use_raw_data=False,
+you might find ftol needs to adjusted as well.
+One
+
+General Settings:
+-> plot_progress = True #(default False) Will display matplotlib plots as fitting proceeds so you can see how it's doing
+
+Preprocessing Settings:
+-> dm = .001 #(default .01) mass increment in model m/z array (smaller=finer gradations=bigger N array (if auto_N)=more accurate=slower)
+
+Fitting Settings:
+-> match_high_points = False #(default False) Makes sure the maximum intensity of the experimental data and model match (works quite well in practice)
+				#note though that if the mass spec data is contaminated with peaks larger than those to be fitted, this should be turned off
+-> carry_over_params = True #(default True) If True, will keep final parameters as initial of next peak for a given batch--hopefully save fitting time.
+-> ftol = 5e-10 #5e-10 #(default 5e-10) Gradient descent will stop when change in error less than this amount, smaller=more sensitive=more iterations
+-> max_iters = 200 #(default 200) Maximum number of descent iterations, though there may be a constant multiplier to this, see max_nfev on scipy.optimize.least_squares
+-> loss = soft_l1 #(default soft_l1). Other options are 'linear', 'huber', 'soft_l1', 'cauchy', 'arctan', see scipy.optimize.least_squares documentation
