@@ -123,6 +123,8 @@ class FittingProblem():
         if names == None:
             names = range(len(mults))
 
+        # print(names)
+        # print(mults)
         length = self.N//2 + 1
         conv = np.ones(length, dtype=complex)
         for i in range(len(mults)):
@@ -213,6 +215,7 @@ class FittingProblem():
                             for n in range(2,6):
                                 temp_copy.pop(ResidueInfo.atom_names.index(ResidueInfo.atom_names[k] + str(n)) - num_popped - (n-2))
                                 names.pop(ResidueInfo.atom_names.index(ResidueInfo.atom_names[k] + str(n)) - num_popped - (n-2))
+                            #print(names)
 
                     ft_prevariable_residue_models[i][residue] = self.Convolution(ft_atom_models,temp_copy, names)
 
@@ -228,7 +231,7 @@ class FittingProblem():
                         if ResidueInfo.atom_names[k] in ResidueInfo.corr_atoms:
                             for n in range(2, 6):
                                 names.append(ResidueInfo.atom_names[k] + str(n))
-                            mults += ResidueInfo.residue_composition[residue][i][ResidueInfo.atom_names.index(ResidueInfo.atom_names[k] + str(2)): ResidueInfo.atom_names.index(ResidueInfo.atom_names[k]+str(5))]
+                            mults += ResidueInfo.residue_composition[residue][i][ResidueInfo.atom_names.index(ResidueInfo.atom_names[k] + str(2)): ResidueInfo.atom_names.index(ResidueInfo.atom_names[k]+str(5))+1]
 
 
                     unmixed_ft_residue_models[i][residue] = self.Convolution(ft_atom_models, mults, names)
@@ -310,6 +313,8 @@ class FittingProblem():
             model_max = max(model_ys)
             self.model_scale = self.target_max/model_max
             model_ys *= self.model_scale
+
+        #print(self.PeptideInfo)
         plt.scatter(self.target_masses,self.target_intensities,color='red',s=5)
         plt.plot(mass_axis,model_ys)
         plt.xlabel('mass')
@@ -560,6 +565,7 @@ class FittingProblem():
                 vector = vector[len(self.var_res):]
 
 
+
     def get_bounds(self):#for scipy.optimize.least_squares
         '''Computes bounds for each parameter based on the fitting schedule.
 
@@ -618,6 +624,11 @@ class FittingProblem():
 
         out = (model_masses-self.target_intensities)
         self.residuals = out
+        # print(self.params)
+        # print(sum(out**2))
+
+        # self.plot()
+
         return out
 
     def scipy_optimize_ls(self):
