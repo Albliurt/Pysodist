@@ -50,8 +50,7 @@ class AtomInfoParser(): #parses the atom model file to hold relevant data - mass
                 self.atom_freqs[current_atom].append(float(split_line[1]))
 
 class ResInfoParser(): #parses the residue model file. Gives the variable residues, the atomic composition of each residue, as well as amplitudes and variable atoms
-    def __init__(self, res_file, atom_parser):
-
+    def __init__(self, res_file, atom_parser, corr_atoms = None):
         f = open(res_file,'r')
         f.readline()#skip initial line
         ##################
@@ -59,44 +58,45 @@ class ResInfoParser(): #parses the residue model file. Gives the variable residu
         ##################
 
         #Parse the species data - number of species and initial amplitudes
-        num_species = int(f.readline().split()[0]) #number of species
-        species_names=[] #U, L, F, etc. Name of the species (labeling condition)
-        species_amps=[] #Amplitudes of each species
-        for i in range(num_species):
+        self.num_species = int(f.readline().split()[0]) #number of species
+        self.species_names=[] #U, L, F, etc. Name of the species (labeling condition)
+        self.species_amps= [] #Amplitudes of each species
+        for i in range(self.num_species):
             line=f.readline().split()
-
-            species_names.append(line[0])
-            species_amps.append(float(line[1]))
+            self.species_names.append(line[0])
+            self.species_amps.append(float(line[1]))
 
         #Parse the variable atoms and their initial values
         num_atoms = int(f.readline().split()[0]) #number of atom types in model: C, H, N, O, S, and variable atoms, etc.
-        atom_names = [] #Elemental symbol
-        atom_init_values = [] #Initial frequency of special atoms (variable or fixed)
-        atom_modes = [] #How to treat the special atoms
+        self.atom_names = [] #Elemental symbol
+        self.atom_init_values = [] #Initial frequency of special atoms (variable or fixed)
+        self.atom_modes = [] #How to treat the special atoms
+        self.corr_atoms = corr_atoms
 
-        corr_atoms = []
+        if corr_atoms is not None:
+            self.residue_corrs = dict()#[] #Correlated carbons for each amino acid
+            calc_corr = True
+        else:
+            calc_corr = False
+
         for i in range(num_atoms):
             line=f.readline().split()
-            atom_names.append(line[0])
-            atom_modes.append(line[1])
+            self.atom_names.append(line[0])
+            self.atom_modes.append(line[1])
             try:
-                atom_init_values.append(float(line[2]))
+                self.atom_init_values.append(float(line[2]))
             except:
-                atom_init_values.append(None)
-            if('C' in line[0] and not line[0] == 'C'):
-                corr_atoms.append(line[0])
+                self.atom_init_values.append(None)
 
         #residues multiplicity of atoms
-        residue_composition=dict() #keys are symbols, values lists of atom multiplicities
-        #one for each species
+        #keys are symbols, values lists of atom multiplicities, one for each species
+        self.residue_composition=dict()
         reading=True
-        residue_names = [] #One letter identifier for amino acids
-        residue_modes = [] #Modes for each amino acid, for SILAC
+        self.residue_names = [] #One letter identifier for amino acids
+        self.residue_modes = [] #Modes for each amino acid, for SILAC
+        self.residue_init_values = [] #Initial frequencies for special residues
 
-        residue_corrs = dict()#[] #Correlated carbons for each amino acid
-
-        residue_init_values = [] #Initial frequencies for special residues
-        res_freqs = dict() #Dictionary for frequencies overall. Frequency is just 1
+        self.res_freqs = dict() #Dictionary for frequencies overall. Frequency is just 1
         #for most residues, but are set to be the values in residue_init_values in
         #pysodist
 
@@ -108,73 +108,81 @@ class ResInfoParser(): #parses the residue model file. Gives the variable residu
 
             current_res = line.split()[0]
             current_mode = line.split()[1]
-            if len(line.split()) > 2:
-                current_corr = ast.literal_eval(line.split()[2])
-            else:
-                current_corr = []
+            if calc_corr:
+                try:
+                    self.residue_corrs[current_res] = ast.literal_eval(line.split()[-1])
+                except:
+                    print("Correlation definitions incorrect")
 
-            residue_names.append(current_res)
-            residue_modes.append(current_mode)
-            residue_corrs[current_res] = current_corr
-            try:
-                residue_init_values.append(float(line.split()[2]))
-            except:
-                residue_init_values.append(None)
+            self.residue_names.append(current_res)
+            self.residue_modes.append(current_mode)
 
-            residue_composition[current_res] = []
-            res_freqs[current_res] = []
 
-            for i in range(num_species):
+            init_values = []
+            for freq in line.split()[2:]:
+                try:
+                    init_values.append(float(freq))
+                except:
+                    pass
+
+            self.residue_init_values.append(init_values)
+            self.residue_composition[current_res] = []
+            self.res_freqs[current_res] = []
+
+            for i in range(self.num_species):
                 a = f.readline()
                 line=list(map(int,a.split()[:num_atoms]))
-                residue_composition[current_res].append(line)
-                res_freqs[current_res].append(1)
+                self.residue_composition[current_res].append(line)
+                self.res_freqs[current_res].append(1)
 
-        totallength = len(atom_names)
-        for i in range(num_species):
-            for residue in residue_composition:
-                carbon_correlation_sets = list(set(residue_corrs[residue]))
-                carbon_correlation_mults = list(map(lambda n:residue_corrs[residue].count(n), carbon_correlation_sets))
-                zero_padded_mults = []
-                for k in range(2,6):
-                    if k in carbon_correlation_sets:
-                        zero_padded_mults.append(carbon_correlation_mults[carbon_correlation_sets.index(k)])
-                    else:
-                        zero_padded_mults.append(0)
-                print(residue)
-                print(residue_composition[residue][i])
-                for k in range(totallength):
-                    atom = atom_names[k]
-                    if 'C' in atom and not 'C' == atom:
-                        for num in range(2,6):
-                            if not (atom+ str(num)) in atom_names:
-                                atom_names.append(atom + str(num))
-                                atom_modes.append("Correlated")
-                                atom_init_values.append(None)
-                        if residue_composition[residue][i][k] > 0:
-                            residue_composition[residue][i][k] -= sum(residue_corrs[residue])
-                            residue_composition[residue][i] += zero_padded_mults# carbon_correlation_sets[carbon_correlation_sets.index(num)]
+        #If we use correlated atoms, we change the "residue composition" to reflect this
+        #using artificial "atoms" that are doublets, triplets, etc.
+        if calc_corr:
+            corr_atom_names = []
+            corr_atom_modes = []
+            corr_atom_init_values = []
+            for k in range(num_atoms):
+                atom = self.atom_names[k]
+                corr_atom_names.append(atom)
+                corr_atom_modes.append(self.atom_modes[k])
+                corr_atom_init_values.append(self.atom_init_values[k])
+                if atom in self.corr_atoms:
+                    for num in range(2,6):
+                        corr_atom_names.append(atom + str(num))
+                        corr_atom_modes.append("Correlated")
+                        corr_atom_init_values.append(None)
+
+
+            for i in range(self.num_species):
+                for residue in self.residue_composition:
+                    correlation_sets = list(set(self.residue_corrs[residue]))
+                    correlation_mults = list(map(lambda n:self.residue_corrs[residue].count(n), correlation_sets))
+                    zero_padded_mults = [] #Zero padded mults is a vector [#2, #3, #4, #5], symbolizing
+                    #the number of doublets to quintets
+
+                    for k in range(2,6):
+                        if k in correlation_sets:
+                            zero_padded_mults.append(correlation_mults[correlation_sets.index(k)])
                         else:
-                            residue_composition[residue][i] += len(zero_padded_mults)*[0]
-                print(residue_composition[residue][i])
+                            zero_padded_mults.append(0)
 
-        self.atom_names = atom_names
-        self.atom_init_values = atom_init_values
-        self.atom_modes = atom_modes
+                    corr_residue_composition = []
 
-        self.residue_composition = residue_composition
-        #print(self.residue_composition)
-        self.residue_modes = residue_modes
-        self.residue_names = residue_names
-        self.residue_init_values = residue_init_values
-        self.residue_corrs = residue_corrs
-        self.corr_atoms = corr_atoms
-
-        self.species_amps = species_amps
-        self.original_species_amps = species_amps.copy()
-        self.species_names = species_names
-        self.num_species = num_species
-        self.res_freqs = res_freqs
+                    for k in range(num_atoms):
+                        atom = self.atom_names[k]
+                        if atom in self.corr_atoms:
+                            if self.residue_composition[residue][i][k] > 0: #To determine if this is a species containing the variable atom
+                                corr_residue_composition.append(self.residue_composition[residue][i][k] - sum(self.residue_corrs[residue]))
+                                corr_residue_composition += zero_padded_mults
+                            else:
+                                corr_residue_composition += (len(zero_padded_mults)+1)*[0]
+                        else:
+                            corr_residue_composition.append(self.residue_composition[residue][i][k])
+                    self.residue_composition[residue][i] = corr_residue_composition
+            self.atom_names = corr_atom_names
+            self.atom_modes = corr_atom_modes
+            self.atom_init_values = corr_atom_init_values
+        self.original_species_amps = self.species_amps.copy()
 
 
 class BatchInfoParser(): #Parses the batch file in the input file. Gives the sequence, charges, and spectrum file

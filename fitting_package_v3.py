@@ -19,7 +19,7 @@ j=1j #imaginary unit
 
 
 class FittingProblem():
-    def __init__(self, N, dm, AtomInfo, ResidueInfo, BatchInfo, i, params, m_hd, target, match_high_points = False):#, logfile):
+    def __init__(self, N, dm, AtomInfo, ResidueInfo, BatchInfo, i, params, m_hd, target, match_high_points = False):
         """
         Overarching class that contains model generation and fitting
         :param N: number of data points in the spectrum to be generated. Determined by pysodist - if auto_N, then it is the mass range divided by dm
@@ -123,8 +123,6 @@ class FittingProblem():
         if names == None:
             names = range(len(mults))
 
-        # print(names)
-        # print(mults)
         length = self.N//2 + 1
         conv = np.ones(length, dtype=complex)
         for i in range(len(mults)):
@@ -159,9 +157,9 @@ class FittingProblem():
         single_isotope_atom_models = self.single_isotope_atom_models
         ft_atom_models = self.ft_atom_models
         for atom in atom_masses:
-            if ft_atom_models[atom] is None or atom in self.var_atoms or atom in self.ResidueInfo.corr_atoms:
+            if ft_atom_models[atom] is None or atom in self.var_atoms or (self.ResidueInfo.corr_atoms is not None and atom in self.ResidueInfo.corr_atoms):
                 ft_atom_models[atom] = np.dot(atom_freqs[atom], single_isotope_atom_models[atom])#fourier_array
-            if atom in self.ResidueInfo.corr_atoms:
+            if self.ResidueInfo.corr_atoms is not None and atom in self.ResidueInfo.corr_atoms:
                 for i in range(2,6):
                     ft_atom_models[atom + str(i)] = np.dot(atom_freqs[atom+ str(i)], single_isotope_atom_models[atom+str(i)])
         self.ft_atom_models = ft_atom_models
@@ -173,54 +171,38 @@ class FittingProblem():
         initializes/modified unmixed_ft_residue_models and ft_prevariable_residue_models
 
         returns: None'''
-        ft_atom_models = self.ft_atom_models
 
         ResidueInfo = self.ResidueInfo
         Pep_mults, Pep_syms = self.PeptideInfo
-        ft_residue_models = [{} for i in range(ResidueInfo.num_species)]
+        ft_atom_models = self.ft_atom_models
         residue_composition = ResidueInfo.residue_composition
         res_freqs = ResidueInfo.res_freqs
-
         unmixed_ft_residue_models = self.unmixed_ft_residue_models
         ft_prevariable_residue_models = self.ft_prevariable_residue_models
 
+        ft_residue_models = [{} for i in range(ResidueInfo.num_species)]
+
+
         for residue in Pep_syms: #Only relevant residues computed #residue_composition:
-
-
-
-            carbon_correlation_sets = list(set(ResidueInfo.residue_corrs[residue]))
-            carbon_correlation_mults = list(map(lambda n:ResidueInfo.residue_corrs[residue].count(n), carbon_correlation_sets))
-            zero_padded_mults = []
-            for k in range(2,6):
-                if k in carbon_correlation_sets:
-                    zero_padded_mults.append(carbon_correlation_mults[carbon_correlation_sets.index(k)])
-                else:
-                    zero_padded_mults.append(0)
-
-
             for i in range(ResidueInfo.num_species):
                 #If ft_prevariable_residue_models has not yet been initialized
                 #Pop out the atoms that are variable, and then compute the convolution
 
                 if ft_prevariable_residue_models[i][residue] is None:
-                    temp_copy = residue_composition[residue][i].copy()
-                    names = ResidueInfo.atom_names.copy()
-                    num_popped = 0
-                    for k in self.var_atom_index:
-                        temp_copy.pop(k-num_popped)
-                        names.pop(k-num_popped)
-                        num_popped += 1
+                    var_indices = self.var_atom_index.copy()
+                    if ResidueInfo.corr_atoms is not None:
+                        for k in self.var_atom_index:
+                            if ResidueInfo.atom_names[k] in ResidueInfo.corr_atoms:
+                                for n in range(1,5):
+                                    var_indices.append(k+n)
 
-                        if 'C' in ResidueInfo.atom_names[k] and not 'C' == ResidueInfo.atom_names[k]:
-                            for n in range(2,6):
-                                temp_copy.pop(ResidueInfo.atom_names.index(ResidueInfo.atom_names[k] + str(n)) - num_popped - (n-2))
-                                names.pop(ResidueInfo.atom_names.index(ResidueInfo.atom_names[k] + str(n)) - num_popped - (n-2))
-                            #print(names)
+                    fixed_comp = [residue_composition[residue][i][k] for k in range(len(residue_composition[residue][i])) if k not in var_indices]
+                    fixed_atom_names = [ResidueInfo.atom_names[k] for k in range(len(ResidueInfo.atom_names)) if k not in var_indices]
 
-                    ft_prevariable_residue_models[i][residue] = self.Convolution(ft_atom_models,temp_copy, names)
+                    ft_prevariable_residue_models[i][residue] = self.Convolution(ft_atom_models,fixed_comp, fixed_atom_names)
 
-                #If unmixed_ft_residue_models is uninitialized or if variable atom frequencies
-                #are being modified, the unmixed_ft_residue_models are changed
+                #The unmixed_ft_residue_models are recomputed with the variable atoms if
+                #they are in the current schedule, as well as for initialization
                 if unmixed_ft_residue_models[i][residue] is None or self.schedule['var_atoms'] == 1:
                     ft_atom_models['Fixed_model'] = ft_prevariable_residue_models[i][residue]
                     names = ['Fixed_model']
@@ -228,17 +210,17 @@ class FittingProblem():
                     for k in self.var_atom_index:
                         names.append(ResidueInfo.atom_names[k])
                         mults.append(residue_composition[residue][i][k])
-                        if ResidueInfo.atom_names[k] in ResidueInfo.corr_atoms:
+                        if ResidueInfo.corr_atoms is not None and ResidueInfo.atom_names[k] in ResidueInfo.corr_atoms:
                             for n in range(2, 6):
                                 names.append(ResidueInfo.atom_names[k] + str(n))
                             mults += ResidueInfo.residue_composition[residue][i][ResidueInfo.atom_names.index(ResidueInfo.atom_names[k] + str(2)): ResidueInfo.atom_names.index(ResidueInfo.atom_names[k]+str(5))+1]
-
 
                     unmixed_ft_residue_models[i][residue] = self.Convolution(ft_atom_models, mults, names)
 
                 #Linear combination of the unmixed models to form final residue models
                 #The frequencies are 1 (all one model) unless there is a variable/fixed residue (not default)
                 if self.ft_residue_models[i][residue] is None or (residue in self.var_res and self.schedule['var_res'] == 1 and not i == 0) or self.schedule['var_atoms'] == 1:
+
                     ft_residue_models[i][residue] = self.LinCombFt([unmixed_ft_residue_models[i][residue], unmixed_ft_residue_models[0][residue]],[res_freqs[residue][i], (1-res_freqs[residue][i])])
                     self.ft_residue_models[i][residue] = ft_residue_models[i][residue]
 
@@ -449,7 +431,7 @@ class FittingProblem():
                 params.append(self.params['var_atoms'][atom])
         if self.schedule['var_res']==1:
             for res in self.var_res:
-                params.append(self.params['var_res'][res])
+                params += self.params['var_res'][res]
 
         return params
 
@@ -528,6 +510,7 @@ class FittingProblem():
     def set_params(self,vector):
         '''Sets the model parameters based on a vector. Determines which parameters are specified by checking
         the fitting schedule'''
+        #print(vector)
         if self.schedule['m_off'] == 1:
             self.params['m_off'] = vector[0]
             vector = vector[1:]
@@ -547,7 +530,7 @@ class FittingProblem():
                 self.AtomInfo.atom_freqs[atom][0] = 1-vector[i]
                 self.params['var_atoms'][atom] = vector[i]
 
-                if atom in self.ResidueInfo.corr_atoms:
+                if self.ResidueInfo.corr_atoms is not None and atom in self.ResidueInfo.corr_atoms:
                     for j in range(2, 6):
                         self.AtomInfo.atom_freqs[atom + str(j)][1] = vector[i]
                         self.AtomInfo.atom_freqs[atom + str(j)][0] = 1-vector[i]
@@ -558,8 +541,11 @@ class FittingProblem():
         if self.schedule['var_res'] == 1:
             for i in range(len(self.var_res)):
                 residue = self.var_res[i]
-                self.ResidueInfo.res_freqs[residue][1:] = [vector[i]]*(len(self.ResidueInfo.res_freqs[residue])-1)
-                self.params['var_res'][residue] = vector[i]
+                self.ResidueInfo.res_freqs[residue][1:] = vector[i*num_species:(i+1)*num_species]
+                #for j in range(1,self.ResidueInfo.num_species):
+                #    self.ResidueInfo.res_freqs[residue][1:] = vector[i*num_species]
+                #self.ResidueInfo.res_freqs[residue][1:] = [vector[i]]*(len(self.ResidueInfo.res_freqs[residue])-1)
+                self.params['var_res'][residue] = vector[i*num_species:(i+1)*num_species]
 
             if len(vector) > len(self.var_res):
                 vector = vector[len(self.var_res):]
@@ -590,7 +576,7 @@ class FittingProblem():
             lowers = lowers + [bound_dict['var_atoms'][0]]*num_vars
             uppers = uppers + [bound_dict['var_atoms'][1]]*num_vars
         if self.schedule['var_res'] == 1:
-            num_vars = len(self.params['var_res'])
+            num_vars = (self.ResidueInfo.num_species-1)*len(self.params['var_res'])
             lowers = lowers + [bound_dict['var_res'][0]]*num_vars
             uppers = uppers + [bound_dict['var_res'][1]]*num_vars
 
